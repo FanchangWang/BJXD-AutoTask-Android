@@ -1,5 +1,6 @@
 package com.guyuexuan.bjxd;
 
+import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.os.Bundle;
 import android.text.InputType;
@@ -15,12 +16,11 @@ import com.guyuexuan.bjxd.util.ApiUtil;
 import com.guyuexuan.bjxd.util.AppUtils;
 import com.guyuexuan.bjxd.util.StorageUtil;
 
-import java.net.InetAddress;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.Locale;
 
 public class AddUserActivity extends AppCompatActivity {
-    private StorageUtil storageUtil;
     private WebView loginWebView;
 
     @Override
@@ -31,7 +31,6 @@ public class AddUserActivity extends AppCompatActivity {
         // 设置标题
         setTitle(AppUtils.getAppNameWithVersion(this));
 
-        storageUtil = new StorageUtil(this);
         initViews();
         setupWebView();
     }
@@ -40,19 +39,16 @@ public class AddUserActivity extends AppCompatActivity {
         loginWebView = findViewById(R.id.loginWebView);
 
         // 添加账号按钮点击事件
-        findViewById(R.id.addUserButton).setOnClickListener(v -> {
-            extractToken();
-        });
+        findViewById(R.id.addUserButton).setOnClickListener(v -> extractToken());
 
         // 手动添加账号按钮点击事件
-        findViewById(R.id.manualAddUserButton).setOnClickListener(v -> {
-            showTokenInputDialog();
-        });
+        findViewById(R.id.manualAddUserButton).setOnClickListener(v -> showTokenInputDialog());
 
         // 返回按钮点击事件
         findViewById(R.id.backButton).setOnClickListener(v -> finish());
     }
 
+    @SuppressLint("SetJavaScriptEnabled")
     private void setupWebView() {
         WebSettings settings = loginWebView.getSettings();
 
@@ -97,10 +93,6 @@ public class AddUserActivity extends AppCompatActivity {
 
                 // 在主线程中更新 UI
                 runOnUiThread(() -> {
-                    // 获取当前时间
-                    String currentTime = new SimpleDateFormat("MM-dd HH:mm").format(new Date());
-                    user.setAddedTime(currentTime); // 设置添加时间
-
                     // 保存用户信息
                     StorageUtil storageUtil = new StorageUtil(AddUserActivity.this);
                     storageUtil.addUser(user);
@@ -111,9 +103,7 @@ public class AddUserActivity extends AppCompatActivity {
                 });
             } catch (Exception e) {
                 // 在主线程中显示错误信息
-                runOnUiThread(() -> {
-                    Toast.makeText(AddUserActivity.this, "获取用户信息失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                });
+                runOnUiThread(() -> Toast.makeText(AddUserActivity.this, "获取用户信息失败: " + e.getMessage(), Toast.LENGTH_SHORT).show());
             }
         }).start();
     }

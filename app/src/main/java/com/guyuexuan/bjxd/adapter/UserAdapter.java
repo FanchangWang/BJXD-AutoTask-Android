@@ -1,5 +1,6 @@
 package com.guyuexuan.bjxd.adapter;
 
+import android.annotation.SuppressLint;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
@@ -42,6 +43,7 @@ public class UserAdapter extends RecyclerView.Adapter<UserAdapter.UserViewHolder
         return new UserViewHolder(view);
     }
 
+    @SuppressLint("SetTextI18n")
     @Override
     public void onBindViewHolder(@NonNull UserViewHolder holder, int position) {
         User user = userList.get(position);
@@ -57,19 +59,12 @@ public class UserAdapter extends RecyclerView.Adapter<UserAdapter.UserViewHolder
         });
 
         // 更新显示昵称和添加时间
-        if (user.getAddedTime() != null && !user.getAddedTime().isEmpty()) {
-            holder.phoneText.setText(user.getMaskedPhone() + "\n" + user.getAddedTime()); // 显示两行
-        }
+        holder.phoneText.setText(user.getMaskedPhone() + "\n" + user.getAddedTime()); // 显示两行
     }
 
     @Override
     public int getItemCount() {
         return userList.size();
-    }
-
-    public void updateList(List<User> newList) {
-        this.userList = newList;
-        notifyDataSetChanged();
     }
 
     public interface OnUserActionListener {
@@ -109,11 +104,8 @@ public class UserAdapter extends RecyclerView.Adapter<UserAdapter.UserViewHolder
 
             orderText.setText(String.valueOf(order));
             nicknameText.setText(user.getNickname());
-            if (user.getAddedTime() != null && !user.getAddedTime().isEmpty()) {
-                phoneText.setText(user.getMaskedPhone() + "\n" + user.getAddedTime());
-            } else {
-                phoneText.setText(user.getMaskedPhone());
-            }
+            phoneText.setText(user.getMaskedPhone() + "\n" + user.getAddedTime());
+
             deleteButton.setOnClickListener(v -> {
                 if (this.listener != null) {
                     this.listener.onDeleteUser(user);

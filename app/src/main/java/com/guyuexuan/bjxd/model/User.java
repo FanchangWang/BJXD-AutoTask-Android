@@ -1,44 +1,38 @@
 package com.guyuexuan.bjxd.model;
 
-import org.json.JSONException;
-import org.json.JSONObject;
+import androidx.annotation.NonNull;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 public class User {
     private final String token;
     private final String nickname;
     private final String phone;
     private final String hid;
-    private String shareUserHid = "";
+    private transient String shareUserHid = "";
     private int order;
     private String addedTime;
 
-    public User(String token, String nickname, String phone, String hid, int order) {
+    public User(String token, String nickname, String phone, String hid) {
         this.token = token;
         this.nickname = nickname;
         this.phone = phone;
         this.hid = hid;
-        this.order = order;
-        this.addedTime = "";
+        this.order = 0;
+        this.addedTime = new SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(new Date());
     }
 
-    public User(String token, String nickname, String phone, String hid, int order, String addedTime) {
-        this.token = token;
-        this.nickname = nickname;
-        this.phone = phone;
-        this.hid = hid;
-        this.order = order;
-        this.addedTime = addedTime;
-    }
-
-    public static User fromString(String json) throws JSONException {
-        JSONObject obj = new JSONObject(json);
-        return new User(
-                obj.getString("token"),
-                obj.getString("nickname"),
-                obj.getString("phone"),
-                obj.getString("hid"),
-                obj.getInt("order"),
-                obj.optString("addedTime", ""));
+    public static User fromJson(JsonObject json) {
+        String token = json.get("token").getAsString();
+        String nickname = json.get("nickname").getAsString();
+        String phone = json.get("phone").getAsString();
+        String hid = json.get("hid").getAsString();
+        return new User(token, nickname, phone, hid);
     }
 
     public String getToken() {
@@ -84,18 +78,18 @@ public class User {
         this.order = order;
     }
 
-    public void setAddedTime(String currentTime) {
-        this.addedTime = currentTime;
-    }
-
     public String getAddedTime() {
         return addedTime;
     }
 
+    @Deprecated
+    public void setAddedTime(String currentTime) {
+        this.addedTime = currentTime;
+    }
+
+    @NonNull
     @Override
     public String toString() {
-        return String.format(
-                "{\"token\":\"%s\",\"nickname\":\"%s\",\"phone\":\"%s\",\"hid\":\"%s\",\"order\":%d,\"addedTime\":\"%s\"}",
-                token, nickname, phone, hid, order, addedTime);
+        return new Gson().toJson(this);
     }
 }

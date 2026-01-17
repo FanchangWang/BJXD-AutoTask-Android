@@ -4,28 +4,70 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <com.google.android.material.textfield.TextInputLayout
-        android:id="@+id/apiKeyInputLayout"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_margin="16dp"
-        android:hint="腾讯混元AI APIKey"
-        app:layout_constraintTop_toTopOf="parent">
-
-        <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/apiKeyInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
-    </com.google.android.material.textfield.TextInputLayout>
-
     <com.google.android.material.switchmaterial.SwitchMaterial
         android:id="@+id/manualAnswerSwitch"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
         android:checked="true"
-        android:text="答题时通过弹窗手动选择答案"
-        app:layout_constraintTop_toBottomOf="@id/apiKeyInputLayout" />
+        android:text="答题：弹窗手动选择答案"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/aiApiKeyInputLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:hint="答题：通用 AI API Key"
+        app:layout_constraintTop_toBottomOf="@+id/manualAnswerSwitch">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/aiApiKeyInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/aiRequestUrlInputLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:hint="答题：通用 AI 请求地址"
+        app:layout_constraintTop_toBottomOf="@+id/aiApiKeyInputLayout">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/aiRequestUrlInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/aiModelInputLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:hint="答题：通用 AI 模型"
+        app:layout_constraintTop_toBottomOf="@+id/aiRequestUrlInputLayout">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/aiModelInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/aiRequestParamsInputLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:hint="答题：通用 AI 请求参数(可空, json 字符串)"
+        app:layout_constraintTop_toBottomOf="@+id/aiModelInputLayout">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/aiRequestParamsInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+    </com.google.android.material.textfield.TextInputLayout>
 
     <LinearLayout
         android:id="@+id/buttonContainer"

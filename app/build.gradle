@@ -11,15 +11,19 @@ android {
             keyPassword '123456'
         }
     }
-    namespace 'com.guyuexuan.bjxd'
-    compileSdkVersion 36
+    namespace = 'com.guyuexuan.bjxd'
+    compileSdkVersion = 36
 
     defaultConfig {
         applicationId "com.guyuexuan.bjxd"
         minSdkVersion 25
         targetSdkVersion 36
         versionCode 2
-        versionName "1.4"
+        versionName "1.5"
+    }
+
+    buildFeatures {
+        resValues = true
     }
 
     buildTypes {
@@ -29,12 +33,21 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_11
-        targetCompatibility JavaVersion.VERSION_11
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
 
-    tasks.withType(JavaCompile) {
-        options.compilerArgs << "-Xlint:deprecation"
+    tasks.withType(JavaCompile).tap {
+        configureEach {
+            options.compilerArgs << "-Xlint:deprecation"
+        }
+    }
+
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+            returnDefaultValues = true
+        }
     }
 }
 
@@ -44,17 +57,13 @@ dependencies {
     implementation libs.material
     implementation libs.activity
     implementation libs.constraintlayout
-    implementation 'androidx.recyclerview:recyclerview:1.4.0'
-    implementation 'androidx.webkit:webkit:1.14.0'
+    implementation libs.recyclerview
+    implementation libs.webkit
 
-    // 网络请求相关
-    implementation 'com.squareup.okhttp3:okhttp:5.1.0'
-    implementation 'com.google.code.gson:gson:2.13.2'
-    implementation 'org.json:json:20250517'
+    // 使用 Bundle 引入
+    implementation libs.bundles.network
+    implementation libs.bundles.lifecycle
 
-    // 其他工具库
-    implementation 'androidx.annotation:annotation:1.9.1'
-    implementation 'androidx.lifecycle:lifecycle-runtime:2.9.3'
-    implementation 'androidx.lifecycle:lifecycle-viewmodel:2.9.3'
-    implementation 'androidx.lifecycle:lifecycle-livedata:2.9.3'
+    // 测试依赖
+    testImplementation libs.junit
 }

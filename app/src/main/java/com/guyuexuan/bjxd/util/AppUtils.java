@@ -14,7 +14,7 @@ public class AppUtils {
             PackageInfo packageInfo = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
             versionName = packageInfo.versionName;
         } catch (PackageManager.NameNotFoundException e) {
-            e.printStackTrace();
+            // 忽略解析异常
         }
         return context.getString(R.string.app_name) + " v" + versionName;
     }

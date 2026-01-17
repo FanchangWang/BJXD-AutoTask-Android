@@ -1,5 +1,6 @@
 package com.guyuexuan.bjxd;
 
+import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.os.Bundle;
 import android.widget.TextView;
@@ -22,10 +23,10 @@ import com.guyuexuan.bjxd.util.StorageUtil;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity implements UserAdapter.OnUserActionListener {
     private final List<User> users = new ArrayList<>();
-    private RecyclerView userList;
     private UserAdapter adapter;
     private StorageUtil storageUtil;
     private TextView accountCountText;
@@ -56,18 +57,14 @@ public class MainActivity extends AppCompatActivity implements UserAdapter.OnUse
     private void initViews() {
         accountCountText = findViewById(R.id.accountCountText);
 
-        userList = findViewById(R.id.userList);
+        RecyclerView userList = findViewById(R.id.userList);
         userList.setLayoutManager(new LinearLayoutManager(this));
         adapter = new UserAdapter(users, this);
         userList.setAdapter(adapter);
 
-        findViewById(R.id.addUserButton).setOnClickListener(v -> {
-            openAddUserActivity();
-        });
+        findViewById(R.id.addUserButton).setOnClickListener(v -> openAddUserActivity());
 
-        findViewById(R.id.configButton).setOnClickListener(v -> {
-            startActivity(new Intent(this, ConfigActivity.class));
-        });
+        findViewById(R.id.configButton).setOnClickListener(v -> startActivity(new Intent(this, ConfigActivity.class)));
 
         findViewById(R.id.startTaskButton).setOnClickListener(v -> {
             if (users.isEmpty()) {
@@ -90,8 +87,8 @@ public class MainActivity extends AppCompatActivity implements UserAdapter.OnUse
 
             @Override
             public boolean onMove(@NonNull RecyclerView recyclerView,
-                    @NonNull RecyclerView.ViewHolder viewHolder,
-                    @NonNull RecyclerView.ViewHolder target) {
+                                  @NonNull RecyclerView.ViewHolder viewHolder,
+                                  @NonNull RecyclerView.ViewHolder target) {
                 int fromPosition = viewHolder.getBindingAdapterPosition();
                 int toPosition = target.getBindingAdapterPosition();
                 Collections.swap(users, fromPosition, toPosition);
@@ -132,13 +129,14 @@ public class MainActivity extends AppCompatActivity implements UserAdapter.OnUse
         touchHelper.attachToRecyclerView(userList);
 
         // 将拖动手柄与 ItemTouchHelper 关联
-        adapter.setOnStartDragListener(holder -> touchHelper.startDrag(holder));
+        adapter.setOnStartDragListener(touchHelper::startDrag);
     }
 
     private void updateAccountCount() {
-        accountCountText.setText(String.format("Token 有效期 28 天，过期后重新添加即可。\n当前共有 %d 个账号", users.size()));
+        accountCountText.setText(String.format(Locale.getDefault(), "Token 有效期 28 天，过期后重新添加即可。\n当前共有 %d 个账号", users.size()));
     }
 
+    @SuppressLint("NotifyDataSetChanged")
     private void loadUsers() {
         users.clear();
         users.addAll(storageUtil.getUsers());
@@ -160,9 +158,12 @@ public class MainActivity extends AppCompatActivity implements UserAdapter.OnUse
                 .setTitle("确认删除")
                 .setMessage("确定要删除该账号吗？")
                 .setPositiveButton("确定", (dialog, which) -> {
-                    users.remove(user);
-                    storageUtil.saveUsers(users);
-                    adapter.notifyDataSetChanged();
+                    int position = users.indexOf(user);
+                    if (position != -1) {
+                        users.remove(position);
+                        storageUtil.saveUsers(users);
+                        adapter.notifyItemRemoved(position);
+                    }
                     // 更新账号数量显示
                     updateAccountCount();
                 })

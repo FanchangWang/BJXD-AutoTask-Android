@@ -1,5 +1,6 @@
 package com.guyuexuan.bjxd;
 
+import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.os.Bundle;
 import android.view.Gravity;
@@ -13,16 +14,16 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import com.guyuexuan.bjxd.model.TaskStatus;
 import com.guyuexuan.bjxd.model.User;
 import com.guyuexuan.bjxd.util.ApiUtil;
 import com.guyuexuan.bjxd.util.AppUtils;
 import com.guyuexuan.bjxd.util.StorageUtil;
-
-import org.json.JSONArray;
-import org.json.JSONObject;
 
 import java.lang.ref.WeakReference;
 import java.text.SimpleDateFormat;
@@ -31,7 +32,9 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 public class TaskActivity extends AppCompatActivity {
@@ -75,16 +78,14 @@ public class TaskActivity extends AppCompatActivity {
 
         List<User> users = storageUtil.getUsers();
         // 显示总任务数
-        appendLog(String.format("共有 %d 个用户任务待执行", users.size()));
+        appendLog(String.format(Locale.getDefault(), "共有 %d 个用户任务待执行", users.size()));
 
-        taskThread = new TaskThread(users, storageUtil.getApiKey(), storageUtil, this::appendLog, () -> {
-            runOnUiThread(() -> {
-                // 关闭屏幕常量
-                getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-                actionButton.setText("返回");
-                actionButton.setEnabled(true);
-            });
-        }, this);
+        taskThread = new TaskThread(users, storageUtil, this::appendLog, () -> runOnUiThread(() -> {
+            // 关闭屏幕常量
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            actionButton.setText("返回");
+            actionButton.setEnabled(true);
+        }), this);
         taskThread.start();
     }
 
@@ -105,6 +106,7 @@ public class TaskActivity extends AppCompatActivity {
         }
     }
 
+    @SuppressLint("SetTextI18n")
     private void showAnswerDialog(String question, String optionsText, List<String> availableOptionLetters) {
         runOnUiThread(() -> {
             AlertDialog.Builder builder = new AlertDialog.Builder(this);
@@ -129,16 +131,7 @@ public class TaskActivity extends AppCompatActivity {
 
             // 为每个选项创建 RadioButton
             for (String optionLetter : availableOptionLetters) {
-                RadioButton radioButton = new RadioButton(this);
-                radioButton.setTag(optionLetter); // 保存选项字母用于返回
-                radioButton.setText(optionLetter); // 只显示选项字母
-                radioButton.setTextSize(16);
-                // 调整水平布局的间距
-                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT);
-                params.setMargins(30, 20, 30, 20);
-                radioButton.setLayoutParams(params);
+                RadioButton radioButton = getRadioButton(optionLetter);
                 radioGroup.addView(radioButton);
             }
 
@@ -168,31 +161,36 @@ public class TaskActivity extends AppCompatActivity {
         });
     }
 
+    @NonNull
+    private RadioButton getRadioButton(String optionLetter) {
+        RadioButton radioButton = new RadioButton(this);
+        radioButton.setTag(optionLetter); // 保存选项字母用于返回
+        radioButton.setText(optionLetter); // 只显示选项字母
+        radioButton.setTextSize(16);
+        // 调整水平布局的间距
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.setMargins(30, 20, 30, 20);
+        radioButton.setLayoutParams(params);
+        return radioButton;
+    }
+
     private static class TaskThread extends Thread {
         // 备用分享用户ID列表
-        private static final String[] BACKUP_HIDS = {
-                "a6688ec1a9ee429fa7b68d50e0c92b1f",
-                "bb8cd2e44c7b45eeb8cc5f7fa71c3322",
-                "5f640c50061b400c91be326c8fe0accd",
-                "55a5d82dacd9417483ae369de9d9b82d"
-        };
+        private static final String[] BACKUP_HIDS = {"a6688ec1a9ee429fa7b68d50e0c92b1f", "bb8cd2e44c7b45eeb8cc5f7fa71c3322", "5f640c50061b400c91be326c8fe0accd", "55a5d82dacd9417483ae369de9d9b82d"};
 
         private final List<User> users;
-        private final String aiApiKey;
         private final StorageUtil storageUtil;
         private final Consumer<String> logger;
         private final Runnable onComplete;
         private final WeakReference<TaskActivity> activityRef;
+        private final List<String> wrongAnswers = new ArrayList<>(); // 错误答案列表
         private volatile boolean running = true;
         private int currentUserIndex = 0;
         // 新增成员变量
         private String historicalCorrectAnswer = null; // 历史正确答案
-        private List<String> wrongAnswers = new ArrayList<>(); // 错误答案列表
 
-        public TaskThread(List<User> users, String aiApiKey, StorageUtil storageUtil, Consumer<String> logger,
-                          Runnable onComplete, TaskActivity activity) {
+        public TaskThread(List<User> users, StorageUtil storageUtil, Consumer<String> logger, Runnable onComplete, TaskActivity activity) {
             this.users = users;
-            this.aiApiKey = aiApiKey;
             this.storageUtil = storageUtil;
             this.logger = logger;
             this.onComplete = onComplete;
@@ -206,7 +204,7 @@ public class TaskActivity extends AppCompatActivity {
                 logger.accept("\nRUN: 设置分享用户ID");
                 setupShareUserHids();
 
-                logger.accept(String.format("\nRUN: 执行任务, 共 %d 个账号", users.size()));
+                logger.accept(String.format(Locale.getDefault(), "\nRUN: 执行任务, 共 %d 个账号", users.size()));
                 for (User user : users) {
                     try {
                         checkShouldStop();
@@ -214,11 +212,11 @@ public class TaskActivity extends AppCompatActivity {
                         if (currentUserIndex > 1) {
                             // 延时 5 - 10 秒
                             logger.accept("进行下一个账号, 等待 5-10 秒...");
-                            Thread.sleep(5000 + new Random().nextInt(5000));
+                            TimeUnit.MILLISECONDS.sleep(5000 + new Random().nextInt(5000));
                         }
 
                         checkShouldStop();
-                        logger.accept(String.format("\n======> 第 %d 个账号", currentUserIndex));
+                        logger.accept(String.format(Locale.getDefault(), "\n======> 第 %d 个账号", currentUserIndex));
                         executeUserTask(user);
                     } catch (InterruptedException e) {
                         throw e;
@@ -227,16 +225,16 @@ public class TaskActivity extends AppCompatActivity {
                     }
                 }
 
-                logger.accept(String.format("\nRUN: 积分详情, 共 %d 个账号", users.size()));
-                logger.accept(String.format("\n============ 积分详情 ============"));
+                logger.accept(String.format(Locale.getDefault(), "\nRUN: 积分详情, 共 %d 个账号", users.size()));
+                logger.accept("\n============ 积分详情 ============");
                 for (int i = 0; i < users.size(); i++) {
                     User user = users.get(i);
                     if (i > 0) {
                         logger.accept("\n进行下一个账号, 等待 5-10 秒...");
-                        Thread.sleep(5000 + new Random().nextInt(5000));
+                        TimeUnit.MILLISECONDS.sleep(5000 + new Random().nextInt(5000));
                     }
 
-                    logger.accept(String.format("\n======== ▷ 第 %d 个账号 ◁ ========", i + 1));
+                    logger.accept(String.format(Locale.getDefault(), "\n======== ▷ 第 %d 个账号 ◁ ========", i + 1));
                     logger.accept(String.format("👻 用户名: %s | 手机号: %s", user.getNickname(), user.getMaskedPhone()));
 
                     // 获取积分详情
@@ -333,7 +331,7 @@ public class TaskActivity extends AppCompatActivity {
                 if (!status.isQuestionCompleted()) {
                     executeQuestionTask(user);
                     // 延时 5-10 秒
-                    Thread.sleep(5000 + new Random().nextInt(5000));
+                    TimeUnit.MILLISECONDS.sleep(5000 + new Random().nextInt(5000));
                 } else {
                     logger.accept("✅ 答题任务 已完成，跳过");
                     // 获取已答题答案
@@ -348,7 +346,7 @@ public class TaskActivity extends AppCompatActivity {
                 if (!status.isSignCompleted()) {
                     executeSignTask(user);
                     // 延时 5-10 秒
-                    Thread.sleep(5000 + new Random().nextInt(5000));
+                    TimeUnit.MILLISECONDS.sleep(5000 + new Random().nextInt(5000));
                 } else {
                     logger.accept("✅ 签到任务 已完成，跳过");
                 }
@@ -358,7 +356,7 @@ public class TaskActivity extends AppCompatActivity {
                 if (!status.isViewCompleted()) {
                     executeViewTask(user);
                     // 延时 5-10 秒
-                    Thread.sleep(5000 + new Random().nextInt(5000));
+                    TimeUnit.MILLISECONDS.sleep(5000 + new Random().nextInt(5000));
                 } else {
                     logger.accept("✅ 浏览文章任务 已完成，跳过");
                 }
@@ -384,16 +382,16 @@ public class TaskActivity extends AppCompatActivity {
                 checkShouldStop();
 
                 try {
-                    JSONObject data = ApiUtil.getSignInfo(user.getToken());
-                    String hid = data.getString("hid");
-                    String rewardHash = data.getString("rewardHash");
+                    JsonObject data = ApiUtil.getSignInfo(user.getToken());
+                    String hid = data.get("hid").getAsString();
+                    String rewardHash = data.get("rewardHash").getAsString();
                     int currentBestScore = 0;
 
-                    JSONArray list = data.getJSONArray("list");
-                    for (int j = 0; j < list.length(); j++) {
-                        JSONObject item = list.getJSONObject(j);
-                        if (item.getString("hid").equals(hid)) {
-                            currentBestScore = item.getInt("score");
+                    JsonArray list = data.getAsJsonArray("list");
+                    for (int j = 0; j < list.size(); j++) {
+                        JsonObject item = list.get(j).getAsJsonObject();
+                        if (item.get("hid").getAsString().equals(hid)) {
+                            currentBestScore = item.get("score").getAsInt();
                             break;
                         }
                     }
@@ -405,9 +403,8 @@ public class TaskActivity extends AppCompatActivity {
                         bestRewardHash = rewardHash;
                     }
                     // 打印当前尝试的签到信息
-                    logger.accept(String.format("第 %d 次尝试: score=%d hid=%s rewardHash=%s",
-                            i + 1, currentBestScore, hid, rewardHash));
-                    logger.accept(String.format("当前可获得签到积分: %d", bestScore));
+                    logger.accept(String.format(Locale.getDefault(), "第 %d 次尝试: score=%d hid=%s rewardHash=%s", i + 1, currentBestScore, hid, rewardHash));
+                    logger.accept(String.format(Locale.getDefault(), "当前可获得签到积分: %d", bestScore));
 
                 } catch (Exception e) {
                     logger.accept("获取签到信息失败: " + e.getMessage());
@@ -417,11 +414,11 @@ public class TaskActivity extends AppCompatActivity {
                 if (i < maxAttemptCount - 1) {
                     // 延时 8-10 秒
                     logger.accept("继续尝试获取更高签到积分, 延时8-10s");
-                    Thread.sleep(8000 + new Random().nextInt(2000));
+                    TimeUnit.MILLISECONDS.sleep(8000 + new Random().nextInt(2000));
                 } else {
                     // 延时 3-4 秒
                     logger.accept("即将提交签到, 延时3-4s");
-                    Thread.sleep(3000 + new Random().nextInt(1000));
+                    TimeUnit.MILLISECONDS.sleep(3000 + new Random().nextInt(1000));
                 }
             }
 
@@ -429,10 +426,10 @@ public class TaskActivity extends AppCompatActivity {
             checkShouldStop();
 
             // 如果找到了最佳选项，执行签到
-            if (bestHid != null && bestRewardHash != null) {
+            if (bestHid != null) {
                 try {
                     ApiUtil.submitSign(user.getToken(), bestHid, bestRewardHash);
-                    logger.accept(String.format("✅ 签到成功: 积分+%d", bestScore));
+                    logger.accept(String.format(Locale.getDefault(), "✅ 签到成功: 积分+%d", bestScore));
                 } catch (Exception e) {
                     logger.accept("❌ 签到失败: " + e.getMessage());
                 }
@@ -444,39 +441,39 @@ public class TaskActivity extends AppCompatActivity {
         /**
          * 执行浏览文章任务
          */
-        private void executeViewTask(User user) throws InterruptedException {
+        private void executeViewTask(User user) {
             logger.accept("🔍 开始执行浏览文章任务");
 
             try {
-                JSONObject articles = ApiUtil.getArticleList(user.getToken());
+                JsonObject articles = ApiUtil.getArticleList(user.getToken());
 
                 // 获取文章列表
-                JSONArray list = articles.getJSONArray("list");
-                if (list.length() > 0) {
+                JsonArray list = articles.getAsJsonArray("list");
+                if (!list.isEmpty()) {
                     // 收集所有文章的 hid
                     List<String> articleHids = new ArrayList<>();
-                    for (int i = 0; i < list.length(); i++) {
-                        articleHids.add(list.getJSONObject(i).getString("hid"));
+                    for (int i = 0; i < list.size(); i++) {
+                        articleHids.add(list.get(i).getAsJsonObject().get("hid").getAsString());
                     }
                     // 打乱顺序
                     Collections.shuffle(articleHids);
 
                     // 选择前3篇文章（如果文章数量不足3篇，则全部选择）
                     int articlesToRead = Math.min(3, articleHids.size());
-                    logger.accept(String.format("需要浏览 %d 篇文章", articlesToRead));
+                    logger.accept(String.format(Locale.getDefault(), "需要浏览 %d 篇文章", articlesToRead));
 
                     // 循环浏览文章
                     for (int i = 0; i < articlesToRead; i++) {
                         checkShouldStop();
 
                         String articleId = articleHids.get(i);
-                        logger.accept(String.format("\n浏览第 %d/%d 篇文章: hid=%s", i + 1, articlesToRead, articleId));
+                        logger.accept(String.format(Locale.getDefault(), "\n浏览第 %d/%d 篇文章: hid=%s", i + 1, articlesToRead, articleId));
 
                         try {
                             ApiUtil.viewArticle(user.getToken(), articleId);
                             // 延时 10-15 秒
                             logger.accept("浏览文章 10-15 秒");
-                            Thread.sleep(11000 + new Random().nextInt(4000));
+                            TimeUnit.MILLISECONDS.sleep(11000 + new Random().nextInt(4000));
                         } catch (Exception e) {
                             logger.accept(String.format("❌ 浏览文章失败: %s", e.getMessage()));
                         }
@@ -486,9 +483,9 @@ public class TaskActivity extends AppCompatActivity {
 
                     // 提交文章积分
                     try {
-                        JSONObject data = ApiUtil.submitArticleScore(user.getToken());
-                        int score = data.getInt("score");
-                        logger.accept(String.format("✅ 浏览文章成功: 积分+%d", score));
+                        JsonObject data = ApiUtil.submitArticleScore(user.getToken());
+                        int score = data.get("score").getAsInt();
+                        logger.accept(String.format(Locale.getDefault(), "✅ 浏览文章成功: 积分+%d", score));
                     } catch (Exception e) {
                         logger.accept("❌ 提交文章积分失败: " + e.getMessage());
                     }
@@ -500,8 +497,7 @@ public class TaskActivity extends AppCompatActivity {
             }
         }
 
-        private String getQuestionAnswer(String question, String optionsText, List<String> availableOptionLetters)
-                throws InterruptedException {
+        private String getQuestionAnswer(String question, String optionsText, List<String> availableOptionLetters) throws InterruptedException {
             String answer;
 
             // 检查是否存在历史正确答案
@@ -535,17 +531,20 @@ public class TaskActivity extends AppCompatActivity {
             }
 
             // 检查是否设置了AI API Key
-            if (!aiApiKey.isEmpty()) {
+            if (this.storageUtil.checkAiSettings()) {
                 logger.accept("使用 AI 查询答案……");
-                String prompt = "你是一个专业的北京现代汽车专家，请直接给出这个单选题的答案，并且不要带'答案'等其他内容。\n" +
-                        question + optionsText;
+                String questionStr = question + optionsText;
 
                 try {
-                    String aiResult = ApiUtil.askAI(aiApiKey, prompt);
+                    String aiResult = ApiUtil.askAI(
+                            this.storageUtil.getAiApiKey(),
+                            this.storageUtil.getAiRequestUrl(),
+                            this.storageUtil.getAiModel(),
+                            this.storageUtil.getAiRequestParams(),
+                            questionStr);
                     // 提取答案中的选项字母
                     String extractedAnswer = aiResult.replaceAll("[^A-D]", "");
-                    if (extractedAnswer.length() > 0
-                            && availableOptionLetters.contains(String.valueOf(extractedAnswer.charAt(0)))) {
+                    if (!extractedAnswer.isEmpty() && availableOptionLetters.contains(String.valueOf(extractedAnswer.charAt(0)))) {
                         answer = String.valueOf(extractedAnswer.charAt(0));
                         logger.accept("使用 AI 答案: " + answer);
                         return answer;
@@ -571,16 +570,16 @@ public class TaskActivity extends AppCompatActivity {
             return answer;
         }
 
-        private void executeQuestionTask(User user) throws InterruptedException {
+        private void executeQuestionTask(User user) {
             logger.accept("🔍 开始执行答题任务");
 
             try {
-                JSONObject data = ApiUtil.getQuestionInfo(user.getToken());
-                JSONObject questionInfo = data.getJSONObject("question_info");
+                JsonObject data = ApiUtil.getQuestionInfo(user.getToken());
+                JsonObject questionInfo = data.getAsJsonObject("question_info");
 
                 // 检查答题状态
                 // state: 1=未答题 2=已答题且正确 3=答错且未有人帮忙答题 4=答错但有人帮忙答题
-                int state = data.getInt("state");
+                int state = data.get("state").getAsInt();
                 if (state == 3) {
                     logger.accept("今日已答题但回答错误，当前无人帮助答题，跳过");
                     return;
@@ -588,7 +587,7 @@ public class TaskActivity extends AppCompatActivity {
                 if (state != 1) {
                     // 尝试获取已有答案
                     if (data.has("answer")) {
-                        String answerText = data.getString("answer");
+                        String answerText = data.get("answer").getAsString();
                         // 从 "C.6个" 格式中提取 "C"
                         if (answerText.matches("[A-D].*")) {
                             String answer = answerText.substring(0, 1);
@@ -601,17 +600,17 @@ public class TaskActivity extends AppCompatActivity {
                     return;
                 }
 
-                String questionId = questionInfo.getString("questions_hid");
-                String question = questionInfo.getString("content");
-                JSONArray options = questionInfo.getJSONArray("option");
+                String questionId = questionInfo.get("questions_hid").getAsString();
+                String question = questionInfo.get("content").getAsString();
+                JsonArray options = questionInfo.getAsJsonArray("option");
 
                 // 构建选项文本
                 StringBuilder optionsText = new StringBuilder("\n"); // 可用选项文本
                 List<String> availableOptionLetters = new ArrayList<>(); // 可用选项字母列表
-                for (int i = 0; i < options.length(); i++) {
-                    JSONObject option = options.getJSONObject(i);
-                    String optionLetter = option.getString("option");
-                    String optionContent = option.getString("option_content");
+                for (int i = 0; i < options.size(); i++) {
+                    JsonObject option = options.get(i).getAsJsonObject();
+                    String optionLetter = option.get("option").getAsString();
+                    String optionContent = option.get("option_content").getAsString();
                     // 排查错误项
                     if (wrongAnswers.contains(optionLetter)) {
                         logger.accept(String.format("排除错误选项: %s.%s", optionLetter, optionContent));
@@ -637,19 +636,18 @@ public class TaskActivity extends AppCompatActivity {
                 checkShouldStop();
 
                 // 提交答案
-                JSONObject result = ApiUtil.submitQuestionAnswer(user.getToken(), questionId, answer,
-                        user.getShareUserHid());
-                int submitAnswerState = result.getInt("state");
+                JsonObject result = ApiUtil.submitQuestionAnswer(user.getToken(), questionId, answer, user.getShareUserHid());
+                int submitAnswerState = result.get("state").getAsInt();
                 if (submitAnswerState == 3) { // 答错且未有人帮忙答题
                     wrongAnswers.add(answer);
-                    if (historicalCorrectAnswer == answer) {
+                    if (Objects.equals(historicalCorrectAnswer, answer)) {
                         historicalCorrectAnswer = null;
                     }
                     logger.accept("❌ 答题错误");
                 } else if (submitAnswerState == 2) { // 答题正确
                     historicalCorrectAnswer = answer;
-                    int score = result.getInt("answer_score");
-                    logger.accept(String.format("✅ 答题正确 | 积分+%d", score));
+                    int score = result.get("answer_score").getAsInt();
+                    logger.accept(String.format(Locale.getDefault(), "✅ 答题正确 | 积分+%d", score));
                 }
             } catch (Exception e) {
                 logger.accept("答题失败: " + e.getMessage());
@@ -664,11 +662,11 @@ public class TaskActivity extends AppCompatActivity {
             return running;
         }
 
-        private void getAnsweredAnswer(User user) throws InterruptedException {
+        private void getAnsweredAnswer(User user) {
             try {
-                JSONObject data = ApiUtil.getQuestionInfo(user.getToken());
+                JsonObject data = ApiUtil.getQuestionInfo(user.getToken());
                 if (data.has("answer")) {
-                    String answerText = data.getString("answer");
+                    String answerText = data.get("answer").getAsString();
                     // 从 "C.6个" 格式中提取 "C"
                     if (answerText.matches("[A-D].*")) {
                         String answer = answerText.substring(0, 1);
@@ -685,22 +683,20 @@ public class TaskActivity extends AppCompatActivity {
 
         private void getScoreDetails(User user) throws InterruptedException {
             try {
-                JSONObject data = ApiUtil.getScore(user.getToken());
-                int totalScore = data.getInt("score");
+                JsonObject data = ApiUtil.getScore(user.getToken());
+                int totalScore = data.get("score").getAsInt();
 
                 // 获取今日日期
-                String today = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-                        .format(new Date());
+                String today = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date());
 
                 // 获取积分记录列表
-                JSONArray records = data.getJSONObject("points_record")
-                        .getJSONArray("list");
+                JsonArray records = data.getAsJsonObject("points_record").getAsJsonArray("list");
 
                 // 获取今日积分记录
-                List<JSONObject> todayRecords = new ArrayList<>();
-                for (int i = 0; i < records.length(); i++) {
-                    JSONObject record = records.getJSONObject(i);
-                    String createdAt = record.getString("created_at");
+                List<JsonObject> todayRecords = new ArrayList<>();
+                for (int i = 0; i < records.size(); i++) {
+                    JsonObject record = records.get(i).getAsJsonObject();
+                    String createdAt = record.get("created_at").getAsString();
                     if (createdAt.startsWith(today)) {
                         todayRecords.add(record);
                     }
@@ -708,23 +704,20 @@ public class TaskActivity extends AppCompatActivity {
 
                 // 计算今日积分变动
                 int todayScore = 0;
-                for (JSONObject record : todayRecords) {
-                    String scoreStr = record.getString("score_str");
+                for (JsonObject record : todayRecords) {
+                    String scoreStr = record.get("score_str").getAsString();
                     todayScore += Integer.parseInt(scoreStr.replace("+", ""));
                 }
 
                 // 显示积分信息
                 String todayScoreStr = todayScore > 0 ? "+" + todayScore : String.valueOf(todayScore);
-                logger.accept(String.format("🎉 总积分: %d | 今日积分变动: %s", totalScore, todayScoreStr));
+                logger.accept(String.format(Locale.getDefault(), "🎉 总积分: %d | 今日积分变动: %s", totalScore, todayScoreStr));
 
                 // 显示今日积分记录
                 if (!todayRecords.isEmpty()) {
                     logger.accept("今日积分记录：");
-                    for (JSONObject record : todayRecords) {
-                        logger.accept(String.format("%s %s %s",
-                                record.getString("created_at"),
-                                record.getString("desc"),
-                                record.getString("score_str")));
+                    for (JsonObject record : todayRecords) {
+                        logger.accept(String.format("%s %s %s", record.get("created_at").getAsString(), record.get("desc").getAsString(), record.get("score_str").getAsString()));
                     }
                 } else {
                     logger.accept("今日暂无积分变动");

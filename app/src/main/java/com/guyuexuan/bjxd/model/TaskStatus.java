@@ -1,5 +1,9 @@
 package com.guyuexuan.bjxd.model;
 
+import androidx.annotation.NonNull;
+
+import com.google.gson.Gson;
+
 public class TaskStatus {
     private boolean signCompleted;
     private boolean viewCompleted;
@@ -37,5 +41,11 @@ public class TaskStatus {
 
     public boolean isAllCompleted() {
         return signCompleted && viewCompleted && questionCompleted;
+    }
+
+    @NonNull
+    @Override
+    public String toString() {
+        return new Gson().toJson(this);
     }
 }
