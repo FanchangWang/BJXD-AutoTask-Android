@@ -1,9 +1,13 @@
 package com.guyuexuan.bjxd;
 
-import android.annotation.SuppressLint;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
+import android.graphics.Color;
+import android.os.Build;
 import android.os.Bundle;
-import android.widget.TextView;
+import android.widget.Button;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -20,26 +24,35 @@ import com.guyuexuan.bjxd.model.User;
 import com.guyuexuan.bjxd.util.AppUtils;
 import com.guyuexuan.bjxd.util.StorageUtil;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Locale;
-
-public class MainActivity extends AppCompatActivity implements UserAdapter.OnUserActionListener {
-    private final List<User> users = new ArrayList<>();
+public class MainActivity extends AppCompatActivity {
+    public static final String EXTRA_USER = BuildConfig.APPLICATION_ID + ".USER";
+    public static final String EXTRA_POSITION = BuildConfig.APPLICATION_ID + ".POSITION";
     private UserAdapter adapter;
-    private StorageUtil storageUtil;
-    private TextView accountCountText;
-
     // 定义 ActivityResultLauncher
-    private final ActivityResultLauncher<Intent> addUserLauncher = registerForActivityResult(
-            new ActivityResultContracts.StartActivityForResult(),
-            result -> {
-                if (result.getResultCode() == MainActivity.RESULT_OK) {
-                    // 刷新用户列表
-                    refreshUserList();
+    private final ActivityResultLauncher<Intent> addUserLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+        if (result.getResultCode() == MainActivity.RESULT_OK) {
+            // 检查返回的数据 Intent 是否为空
+            Intent data = result.getData();
+            if (data != null) {
+                // 从 Intent 中获取返回的 User 对象
+                User user;
+                // 2. 使用新的 API，并处理 Android 13 以下的兼容性
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    user = data.getSerializableExtra(EXTRA_USER, User.class);
+                } else {
+                    // 对于旧版本，继续使用过时的方法
+                    user = (User) data.getSerializableExtra(EXTRA_USER);
                 }
-            });
+                int position = data.getIntExtra(EXTRA_POSITION, -1);
+                // 刷新用户列表
+                if (user != null) { // 3. 最好增加一个非空判断
+                    adapter.saveItem(user, position);
+                }
+            }
+        }
+    });
+    @SuppressWarnings("FieldCanBeLocal")
+    private UserAdapter.OnItemActionListener onItemActionListener; // 防止弱引用失效
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -49,143 +62,99 @@ public class MainActivity extends AppCompatActivity implements UserAdapter.OnUse
         // 设置标题
         setTitle(AppUtils.getAppNameWithVersion(this));
 
-        storageUtil = new StorageUtil(this);
-        initViews();
-        loadUsers();
-    }
+        // 初始化 StorageUtil
+        StorageUtil storageUtil = new StorageUtil(this);
 
-    private void initViews() {
-        accountCountText = findViewById(R.id.accountCountText);
+        // 获取控件
+        RecyclerView recyclerView = findViewById(R.id.rv_user_list);
+        Button addUserButton = findViewById(R.id.btn_add_user);
+        Button configButton = findViewById(R.id.btn_config);
+        Button startTaskButton = findViewById(R.id.btn_start_task);
 
-        RecyclerView userList = findViewById(R.id.userList);
-        userList.setLayoutManager(new LinearLayoutManager(this));
-        adapter = new UserAdapter(users, this);
-        userList.setAdapter(adapter);
 
-        findViewById(R.id.addUserButton).setOnClickListener(v -> openAddUserActivity());
+        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        adapter = new UserAdapter();
+        recyclerView.setAdapter(adapter);
 
-        findViewById(R.id.configButton).setOnClickListener(v -> startActivity(new Intent(this, ConfigActivity.class)));
-
-        findViewById(R.id.startTaskButton).setOnClickListener(v -> {
-            if (users.isEmpty()) {
-                Toast.makeText(this, "请先添加账号", Toast.LENGTH_SHORT).show();
-                return;
+        addUserButton.setOnClickListener(v -> addUserLauncher.launch(new Intent(this, AddUserActivity.class)));
+        configButton.setOnClickListener(v -> startActivity(new Intent(this, ConfigActivity.class)));
+        startTaskButton.setOnClickListener(v -> {
+            if (adapter.getItemCount() == 0) {
+                Toast.makeText(this, "请先添加账号！", Toast.LENGTH_SHORT).show();
+            } else {
+                startActivity(new Intent(this, TaskActivity.class));
             }
-            startActivity(new Intent(this, TaskActivity.class));
         });
 
         // 添加拖拽排序功能
-        ItemTouchHelper.Callback callback = new ItemTouchHelper.SimpleCallback(
-                ItemTouchHelper.UP | ItemTouchHelper.DOWN, 0) {
-            private boolean isDragging = false;
+        ItemTouchHelper touchHelper = getItemTouchHelper();
+        touchHelper.attachToRecyclerView(recyclerView);
 
+        onItemActionListener = new UserAdapter.OnItemActionListener() {
             @Override
-            public boolean isLongPressDragEnabled() {
-                // 禁用长按拖动
-                return false;
+            public void onDeleteUser(int position) {
+                if (position != RecyclerView.NO_POSITION) {
+                    new AlertDialog.Builder(MainActivity.this).setTitle("确认删除").setMessage("确定要删除该账号吗？").setPositiveButton("确定", (dialog, which) -> adapter.removeItem(position)).setNegativeButton("取消", null).show();
+                }
             }
 
             @Override
-            public boolean onMove(@NonNull RecyclerView recyclerView,
-                                  @NonNull RecyclerView.ViewHolder viewHolder,
-                                  @NonNull RecyclerView.ViewHolder target) {
+            public void onCopyUserToken(String token) {
+                ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                ClipData clip = ClipData.newPlainText("Token", token);
+                clipboard.setPrimaryClip(clip);
+                Toast.makeText(MainActivity.this, "Token 已复制", Toast.LENGTH_SHORT).show();
+            }
+        };
+
+        adapter.setOnItemActionListener(onItemActionListener);
+
+        // 设置初始用户数据
+        adapter.setInitialData(storageUtil);
+    }
+
+    @NonNull
+    private ItemTouchHelper getItemTouchHelper() {
+        ItemTouchHelper.Callback callback = new ItemTouchHelper.SimpleCallback(ItemTouchHelper.UP | ItemTouchHelper.DOWN, 0) {
+            @Override
+            public boolean onMove(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder, @NonNull RecyclerView.ViewHolder target) {
                 int fromPosition = viewHolder.getBindingAdapterPosition();
                 int toPosition = target.getBindingAdapterPosition();
-                Collections.swap(users, fromPosition, toPosition);
-                adapter.notifyItemMoved(fromPosition, toPosition);
-
-                // 更新所有可见项的序号
-                for (int i = 0; i < recyclerView.getChildCount(); i++) {
-                    RecyclerView.ViewHolder holder = recyclerView.getChildViewHolder(recyclerView.getChildAt(i));
-                    if (holder instanceof UserAdapter.UserViewHolder) {
-                        ((UserAdapter.UserViewHolder) holder).updateOrder(holder.getBindingAdapterPosition() + 1);
-                    }
-                }
-
-                return true;
+                return adapter.swapItems(fromPosition, toPosition);
             }
 
             @Override
             public void onSwiped(@NonNull RecyclerView.ViewHolder viewHolder, int direction) {
             }
 
-            @Override
-            public void clearView(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder) {
-                super.clearView(recyclerView, viewHolder);
-                if (isDragging) {
-                    isDragging = false;
-                    onMoveUser(viewHolder.getBindingAdapterPosition(), viewHolder.getBindingAdapterPosition());
-                }
-            }
-
+            // 当状态改变时触发（选定、开始拖动、结束拖动）
             @Override
             public void onSelectedChanged(RecyclerView.ViewHolder viewHolder, int actionState) {
                 super.onSelectedChanged(viewHolder, actionState);
-                isDragging = actionState == ItemTouchHelper.ACTION_STATE_DRAG;
+
+                // 检查是否处于拖拽状态
+                if (actionState == ItemTouchHelper.ACTION_STATE_DRAG && viewHolder != null) {
+                    // 开始拖动：设置反馈效果（如变色、缩放）
+                    viewHolder.itemView.setBackgroundColor(Color.LTGRAY); // 临时变灰
+                    viewHolder.itemView.setScaleX(1.05f); // 略微放大
+                    viewHolder.itemView.setScaleY(1.05f);
+                    viewHolder.itemView.setElevation(10f); // 增加阴影层级
+                }
+            }
+
+            // 当手指松开，拖动动画结束，视图恢复原位时触发
+            @Override
+            public void clearView(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder) {
+                super.clearView(recyclerView, viewHolder);
+
+                // 结束拖动：恢复原始状态
+                viewHolder.itemView.setBackgroundColor(Color.TRANSPARENT); // 恢复透明
+                viewHolder.itemView.setScaleX(1.0f); // 恢复原大
+                viewHolder.itemView.setScaleY(1.0f);
+                viewHolder.itemView.setElevation(0f); // 恢复阴影
             }
         };
 
-        ItemTouchHelper touchHelper = new ItemTouchHelper(callback);
-        touchHelper.attachToRecyclerView(userList);
-
-        // 将拖动手柄与 ItemTouchHelper 关联
-        adapter.setOnStartDragListener(touchHelper::startDrag);
-    }
-
-    private void updateAccountCount() {
-        accountCountText.setText(String.format(Locale.getDefault(), "Token 有效期 28 天，过期后重新添加即可。\n当前共有 %d 个账号", users.size()));
-    }
-
-    @SuppressLint("NotifyDataSetChanged")
-    private void loadUsers() {
-        users.clear();
-        users.addAll(storageUtil.getUsers());
-        adapter.notifyDataSetChanged();
-
-        // 更新账号数量显示
-        updateAccountCount();
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        loadUsers();
-    }
-
-    @Override
-    public void onDeleteUser(User user) {
-        new AlertDialog.Builder(this)
-                .setTitle("确认删除")
-                .setMessage("确定要删除该账号吗？")
-                .setPositiveButton("确定", (dialog, which) -> {
-                    int position = users.indexOf(user);
-                    if (position != -1) {
-                        users.remove(position);
-                        storageUtil.saveUsers(users);
-                        adapter.notifyItemRemoved(position);
-                    }
-                    // 更新账号数量显示
-                    updateAccountCount();
-                })
-                .setNegativeButton("取消", null)
-                .show();
-    }
-
-    @Override
-    public void onMoveUser(int fromPosition, int toPosition) {
-        // 更新排序后保存
-        for (int i = 0; i < users.size(); i++) {
-            users.get(i).setOrder(i);
-        }
-        storageUtil.saveUsers(users);
-    }
-
-    private void openAddUserActivity() {
-        // 使用新的方式启动 Activity
-        addUserLauncher.launch(new Intent(this, AddUserActivity.class));
-    }
-
-    private void refreshUserList() {
-        loadUsers();
+        return new ItemTouchHelper(callback);
     }
 }

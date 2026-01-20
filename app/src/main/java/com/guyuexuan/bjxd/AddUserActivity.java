@@ -2,6 +2,7 @@ package com.guyuexuan.bjxd;
 
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
+import android.content.Intent;
 import android.os.Bundle;
 import android.text.InputType;
 import android.webkit.WebSettings;
@@ -16,12 +17,11 @@ import com.guyuexuan.bjxd.util.ApiUtil;
 import com.guyuexuan.bjxd.util.AppUtils;
 import com.guyuexuan.bjxd.util.StorageUtil;
 
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.Locale;
-
 public class AddUserActivity extends AppCompatActivity {
+    public static final String EXTRA_USER = BuildConfig.APPLICATION_ID + ".USER";
+    public static final String EXTRA_POSITION = BuildConfig.APPLICATION_ID + ".POSITION";
     private WebView loginWebView;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -39,7 +39,7 @@ public class AddUserActivity extends AppCompatActivity {
         loginWebView = findViewById(R.id.loginWebView);
 
         // 添加账号按钮点击事件
-        findViewById(R.id.addUserButton).setOnClickListener(v -> extractToken());
+        findViewById(R.id.btn_add_user).setOnClickListener(v -> extractToken());
 
         // 手动添加账号按钮点击事件
         findViewById(R.id.manualAddUserButton).setOnClickListener(v -> showTokenInputDialog());
@@ -66,17 +66,15 @@ public class AddUserActivity extends AppCompatActivity {
      * 从localStorage中提取token
      */
     private void extractToken() {
-        loginWebView.evaluateJavascript(
-                "localStorage.getItem('token')",
-                value -> {
-                    if (value != null && !value.equals("null")) {
-                        // 移除引号
-                        String token = value.replaceAll("\"", "");
-                        addUser(token);
-                    } else {
-                        runOnUiThread(() -> Toast.makeText(this, "请先登录", Toast.LENGTH_SHORT).show());
-                    }
-                });
+        loginWebView.evaluateJavascript("localStorage.getItem('token')", value -> {
+            if (value != null && !value.equals("null")) {
+                // 移除引号
+                String token = value.replaceAll("\"", "");
+                addOrUpdateUser(token);
+            } else {
+                runOnUiThread(() -> Toast.makeText(this, "请先登录", Toast.LENGTH_SHORT).show());
+            }
+        });
     }
 
     /**
@@ -84,7 +82,7 @@ public class AddUserActivity extends AppCompatActivity {
      *
      * @param token 用户token
      */
-    private void addUser(String token) {
+    private void addOrUpdateUser(String token) {
         // 在后台线程中执行网络请求
         new Thread(() -> {
             try {
@@ -95,10 +93,14 @@ public class AddUserActivity extends AppCompatActivity {
                 runOnUiThread(() -> {
                     // 保存用户信息
                     StorageUtil storageUtil = new StorageUtil(AddUserActivity.this);
-                    storageUtil.addUser(user);
-
-                    // 返回主页
-                    setResult(RESULT_OK);
+                    int position = storageUtil.saveUser(user);
+                    // 创建结果 Intent
+                    Intent resultIntent = new Intent();
+                    // 将保存后的用户对象放入 intent
+                    resultIntent.putExtra(EXTRA_USER, user);
+                    resultIntent.putExtra(EXTRA_POSITION, position);
+                    // 设置结果码和数据
+                    setResult(RESULT_OK, resultIntent);
                     finish();
                 });
             } catch (Exception e) {
@@ -123,7 +125,7 @@ public class AddUserActivity extends AppCompatActivity {
             String token = input.getText().toString().trim();
             if (!token.isEmpty()) {
                 Toast.makeText(this, "正在检查用户信息……", Toast.LENGTH_SHORT).show();
-                addUser(token); // 调用 addUser 方法
+                addOrUpdateUser(token);
             } else {
                 Toast.makeText(this, "Token 不能为空", Toast.LENGTH_SHORT).show();
             }

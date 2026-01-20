@@ -76,7 +76,7 @@ public class TaskActivity extends AppCompatActivity {
             }
         });
 
-        List<User> users = storageUtil.getUsers();
+        List<User> users = storageUtil.getUserList();
         // 显示总任务数
         appendLog(String.format(Locale.getDefault(), "共有 %d 个用户任务待执行", users.size()));
 

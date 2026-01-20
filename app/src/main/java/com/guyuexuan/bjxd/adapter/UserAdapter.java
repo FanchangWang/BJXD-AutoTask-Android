@@ -1,130 +1,187 @@
 package com.guyuexuan.bjxd.adapter;
 
 import android.annotation.SuppressLint;
-import android.content.ClipData;
-import android.content.ClipboardManager;
-import android.content.Context;
 import android.view.LayoutInflater;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
-import android.widget.ImageView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.guyuexuan.bjxd.R;
 import com.guyuexuan.bjxd.model.User;
+import com.guyuexuan.bjxd.util.StorageUtil;
 
+import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class UserAdapter extends RecyclerView.Adapter<UserAdapter.UserViewHolder> {
-    private final OnUserActionListener listener;
-    private List<User> userList;
-    private OnStartDragListener dragListener;
+    private final List<User> mUserList = new ArrayList<>();
+    StorageUtil mStorageUtil;
+    private WeakReference<OnItemActionListener> mActionListenerRef;
 
-    public UserAdapter(List<User> userList, OnUserActionListener listener) {
-        this.userList = userList;
-        this.listener = listener;
+    /**
+     * 设置条目操作监听器
+     *
+     * @param listener 实现 OnItemActionListener 接口的对象，用于接收删除事件
+     */
+    public void setOnItemActionListener(OnItemActionListener listener) {
+        mActionListenerRef = new WeakReference<>(listener);
     }
 
-    public void setOnStartDragListener(OnStartDragListener listener) {
-        this.dragListener = listener;
+    public void setInitialData(StorageUtil storageUtil) {
+        mStorageUtil = storageUtil;
+        mUserList.clear();
+        List<User> userList = mStorageUtil.getUserList();
+        if (userList != null && !userList.isEmpty()) {
+            mUserList.addAll(userList);
+        }
+        notifyItemRangeInserted(0, mUserList.size());
+    }
+
+    /**
+     * 交换用户列表中的两个项
+     *
+     * @param fromPosition 第一个项的位置
+     * @param toPosition   第二个项的位置
+     * @return 如果交换成功则返回 true，否则返回 false
+     */
+    public boolean swapItems(int fromPosition, int toPosition) {
+        if (fromPosition < 0 || toPosition < 0 || fromPosition >= mUserList.size() || toPosition >= mUserList.size()) {
+            return false;
+        }
+        Collections.swap(mUserList, fromPosition, toPosition);
+        notifyItemMoved(fromPosition, toPosition);
+        // 3. 核心：通知范围内的条目刷新序号
+        // 范围是从 from 和 to 之间的所有项
+        int start = Math.min(fromPosition, toPosition);
+        int count = Math.abs(fromPosition - toPosition) + 1;
+        notifyItemRangeChanged(start, count);
+        mStorageUtil.saveUserList(mUserList);
+        return true;
+    }
+
+    /**
+     * 删除用户列表中的项
+     *
+     * @param position 待删除项的位置
+     */
+    public void removeItem(int position) {
+        if (position < 0 || position >= mUserList.size()) {
+            return;
+        }
+        mUserList.remove(position);
+        notifyItemRemoved(position);
+        notifyItemRangeChanged(position, mUserList.size() - position);
+        mStorageUtil.saveUserList(mUserList);
+    }
+
+    public void saveItem(User user, int position) {
+        if (position == -1) {
+            mUserList.add(user);
+            notifyItemInserted(mUserList.size() - 1);
+        } else {
+            mUserList.set(position, user);
+            notifyItemChanged(position);
+        }
+    }
+
+    public void deleteUser(int position) {
+        if (position < 0 || position >= mUserList.size()) {
+            return;
+        }
+        OnItemActionListener mActionListener = mActionListenerRef.get();
+        if (mActionListener != null) {
+            mActionListener.onDeleteUser(position);
+        }
+    }
+
+    public void copyUserToken(String token) {
+        if (token == null || token.isEmpty()) {
+            return;
+        }
+        OnItemActionListener mActionListener = mActionListenerRef.get();
+        if (mActionListener != null) {
+            mActionListener.onCopyUserToken(token);
+        }
     }
 
     @NonNull
     @Override
     public UserViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        View view = LayoutInflater.from(parent.getContext())
-                .inflate(R.layout.item_user, parent, false);
-        return new UserViewHolder(view);
+        View itemView = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_user, parent, false);
+        return new UserViewHolder(itemView);
     }
 
-    @SuppressLint("SetTextI18n")
     @Override
     public void onBindViewHolder(@NonNull UserViewHolder holder, int position) {
-        User user = userList.get(position);
-        holder.bind(user, position + 1, listener, dragListener);
-
-        holder.copyButton.setOnClickListener(v -> {
-            // 复制 token 到剪切板
-            ClipboardManager clipboard = (ClipboardManager) holder.itemView.getContext()
-                    .getSystemService(Context.CLIPBOARD_SERVICE);
-            ClipData clip = ClipData.newPlainText("Token", user.getToken());
-            clipboard.setPrimaryClip(clip);
-            Toast.makeText(holder.itemView.getContext(), "Token 已复制", Toast.LENGTH_SHORT).show();
-        });
-
-        // 更新显示昵称和添加时间
-        holder.phoneText.setText(user.getMaskedPhone() + "\n" + user.getAddedTime()); // 显示两行
+        User user = mUserList.get(position);
+        holder.itemView.setTag(R.id.tag_adapter, this);
+        holder.bind(user, position);
     }
 
     @Override
     public int getItemCount() {
-        return userList.size();
+        return mUserList.size();
     }
 
-    public interface OnUserActionListener {
-        void onDeleteUser(User user);
+    /**
+     * 条目操作监听器接口
+     * 用于处理列表中用户的删除事件
+     */
+    public interface OnItemActionListener {
+        void onDeleteUser(int position);
 
-        void onMoveUser(int fromPosition, int toPosition);
-    }
-
-    public interface OnStartDragListener {
-        void onStartDrag(RecyclerView.ViewHolder holder);
+        void onCopyUserToken(String token);
     }
 
     public static class UserViewHolder extends RecyclerView.ViewHolder {
         private final TextView orderText;
         private final TextView nicknameText;
         private final TextView phoneText;
-        private final ImageButton deleteButton;
-        private final ImageView dragHandle;
-        private final ImageButton copyButton;
-
-        private OnUserActionListener listener;
-        private OnStartDragListener dragListener;
 
         public UserViewHolder(@NonNull View itemView) {
             super(itemView);
-            orderText = itemView.findViewById(R.id.orderText);
-            nicknameText = itemView.findViewById(R.id.nicknameText);
-            phoneText = itemView.findViewById(R.id.phoneText);
-            deleteButton = itemView.findViewById(R.id.deleteButton);
-            dragHandle = itemView.findViewById(R.id.dragHandle);
-            copyButton = itemView.findViewById(R.id.copyButton);
+            orderText = itemView.findViewById(R.id.tv_order_number);
+            nicknameText = itemView.findViewById(R.id.tv_nickname);
+            phoneText = itemView.findViewById(R.id.tv_phone);
+            ImageButton deleteButton = itemView.findViewById(R.id.btn_delete);
+            ImageButton copyButton = itemView.findViewById(R.id.btn_copy);
+
+            // 设置删除按钮点击监听
+            deleteButton.setOnClickListener(v -> {
+                int position = getBindingAdapterPosition();
+                if (position != RecyclerView.NO_POSITION) {
+                    ((UserAdapter) itemView.getTag(R.id.tag_adapter)).deleteUser(position);
+                }
+            });
+
+            // 设置复制按钮点击监听
+            copyButton.setOnClickListener(v -> {
+                int position = getBindingAdapterPosition();
+                if (position != RecyclerView.NO_POSITION) {
+                    String token = ((User) itemView.getTag(R.id.tag_user)).getToken();
+                    ((UserAdapter) itemView.getTag(R.id.tag_adapter)).copyUserToken(token);
+                }
+            });
         }
 
-        public void bind(User user, int order, OnUserActionListener listener, OnStartDragListener dragListener) {
-            this.listener = listener;
-            this.dragListener = dragListener;
-
-            orderText.setText(String.valueOf(order));
+        @SuppressLint("SetTextI18n")
+        public void bind(User user, int position) {
+            // 设置数据
+            int orderIdx = position + 1;
+            orderText.setText(String.valueOf(orderIdx));
             nicknameText.setText(user.getNickname());
             phoneText.setText(user.getMaskedPhone() + "\n" + user.getAddedTime());
 
-            deleteButton.setOnClickListener(v -> {
-                if (this.listener != null) {
-                    this.listener.onDeleteUser(user);
-                }
-            });
-
-            // 设置拖动手柄的触摸监听
-            dragHandle.setOnTouchListener((v, event) -> {
-                if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
-                    if (this.dragListener != null) {
-                        this.dragListener.onStartDrag(this);
-                    }
-                }
-                return false;
-            });
-        }
-
-        public void updateOrder(int order) {
-            orderText.setText(String.valueOf(order));
+            // 绑定Tag数据
+            itemView.setTag(R.id.tag_adapter, itemView.getTag(R.id.tag_adapter)); // 保留Adapter引用
+            itemView.setTag(R.id.tag_user, user);
+            itemView.setTag(R.id.tag_position, position);
         }
     }
 }

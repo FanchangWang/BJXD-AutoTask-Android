@@ -38,7 +38,7 @@ public class StorageUtil {
      *
      * @param users 用户列表
      */
-    public void saveUsers(List<User> users) {
+    public void saveUserList(List<User> users) {
         String json = gson.toJson(users);
         prefs.edit().putString(KEY_USERS, json).apply();
     }
@@ -48,7 +48,7 @@ public class StorageUtil {
      *
      * @return 用户列表
      */
-    public List<User> getUsers() {
+    public List<User> getUserList() {
         String json = prefs.getString(KEY_USERS, "[]");
         Type type = new TypeToken<List<User>>() {
         }.getType();
@@ -195,31 +195,21 @@ public class StorageUtil {
 
     /**
      * 添加或更新用户
-     * 如果用户已存在（根据手机号判断），则更新用户信息并保持原有顺序
-     * 如果用户不存在，则添加新用户，顺序设为列表长度
      *
      * @param user 用户对象
+     * @return 新用户返回 -1，老用户返回其在列表中的位置
      */
-    public void addUser(User user) {
-        List<User> users = getUsers();
+    public int saveUser(User user) {
+        List<User> userList = getUserList();
+
         // 检查是否已存在
-        boolean isUpdated = false;
-        for (int i = 0; i < users.size(); i++) {
-            if (users.get(i).getPhone().equals(user.getPhone())) {
-                // 更新已存在的用户信息，保持原有的 order
-                user.setOrder(users.get(i).getOrder());
-                users.set(i, user);
-                isUpdated = true;
-                break;
-            }
+        int position = userList.indexOf(user);
+        if (position == -1){
+            userList.add(user);
+        }else{
+            userList.set(position, user);
         }
-
-        if (!isUpdated) {
-            // 添加新用户，order 设为列表长度
-            user.setOrder(users.size());
-            users.add(user);
-        }
-
-        saveUsers(users);
+        saveUserList(userList);
+        return position;
     }
 }

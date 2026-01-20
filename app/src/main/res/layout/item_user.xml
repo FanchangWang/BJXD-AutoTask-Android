@@ -1,83 +1,73 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:padding="16dp">
 
     <TextView
-        android:id="@+id/orderText"
+        android:id="@+id/tv_order_number"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:minWidth="24dp"
-        android:textSize="16sp"
         android:textColor="?android:attr/textColorPrimary"
+        android:textSize="16sp"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"/>
+        app:layout_constraintTop_toTopOf="parent" />
 
     <TextView
-        android:id="@+id/nicknameText"
+        android:id="@+id/tv_nickname"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"
         android:layout_marginEnd="8dp"
-        android:textSize="16sp"
-        android:maxLines="1"
         android:ellipsize="end"
+        android:maxLines="1"
         android:textColor="?android:attr/textColorPrimary"
-        app:layout_constraintStart_toEndOf="@id/orderText"
-        app:layout_constraintEnd_toStartOf="@id/phoneText"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"/>
+        android:textSize="16sp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/tv_phone"
+        app:layout_constraintStart_toEndOf="@id/tv_order_number"
+        app:layout_constraintTop_toTopOf="parent" />
 
     <TextView
-        android:id="@+id/phoneText"
+        android:id="@+id/tv_phone"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginEnd="8dp"
-        android:textSize="12sp"
-        android:maxLines="2"
         android:ellipsize="end"
+        android:maxLines="2"
         android:textColor="?android:attr/textColorSecondary"
-        app:layout_constraintEnd_toStartOf="@id/copyButton"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"/>
-
-    <ImageButton
-        android:id="@+id/copyButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:padding="8dp"
-        android:src="@android:drawable/ic_menu_share"
-        android:tint="?android:attr/textColorSecondary"
+        android:textSize="12sp"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toStartOf="@id/dragHandle"
+        app:layout_constraintEnd_toStartOf="@id/btn_copy"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <ImageView
-        android:id="@+id/dragHandle"
+    <ImageButton
+        android:id="@+id/btn_copy"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:src="@android:drawable/ic_menu_sort_by_size"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/copy_button_desc"
         android:padding="8dp"
-        android:tint="?android:attr/textColorSecondary"
-        app:layout_constraintEnd_toStartOf="@id/deleteButton"
+        android:src="@android:drawable/ic_menu_share"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/btn_delete"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"/>
+        app:tint="?android:attr/textColorSecondary" />
 
     <ImageButton
-        android:id="@+id/deleteButton"
+        android:id="@+id/btn_delete"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:src="@android:drawable/ic_menu_delete"
         android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/delete_button_desc"
         android:padding="8dp"
-        android:tint="?android:attr/textColorSecondary"
+        android:src="@android:drawable/ic_menu_delete"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"/>
+        app:tint="?android:attr/textColorSecondary" />
 
 </androidx.constraintlayout.widget.ConstraintLayout> 
