@@ -19,7 +19,7 @@ android {
         minSdkVersion 25
         targetSdkVersion 36
         versionCode 2
-        versionName "1.6"
+        versionName "1.7"
     }
 
     buildFeatures {
