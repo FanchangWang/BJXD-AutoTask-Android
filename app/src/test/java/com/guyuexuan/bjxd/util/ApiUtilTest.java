@@ -1,17 +1,21 @@
-
 package com.guyuexuan.bjxd.util;
+
+import static org.junit.Assert.assertNotNull;
 
 import com.google.gson.JsonObject;
 import com.guyuexuan.bjxd.model.QinglongEnv;
 import com.guyuexuan.bjxd.model.TaskStatus;
 import com.guyuexuan.bjxd.model.User;
 
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.IOException;
 
-import static org.junit.Assert.assertNotNull;
-
+/**
+ * 手工联通性测试：需要真实 token 和网络，不参与 CI
+ */
+@Ignore("Manual integration test, requires valid credentials and network")
 public class ApiUtilTest {
 
     private final String token = "北京现代账号 token";
@@ -67,9 +71,9 @@ public class ApiUtilTest {
 
     @Test
     public void getQinglongToken_success() throws IOException {
-        String base_url = "http://192.168.31.50:5700";
-        String client_id = "re_Qx4A6-KjW";
-        String client_secret = "-GxbEkQEQzX44x3jl5NGCoUv";
+        String base_url = "http://<QL_HOST>:<QL_PORT>";
+        String client_id = "<QL_CLIENT_ID>";
+        String client_secret = "<QL_CLIENT_SECRET>";
 
         String token = ApiUtil.getQinglongToken(base_url, client_id, client_secret);
 
@@ -78,8 +82,8 @@ public class ApiUtilTest {
 
     @Test
     public void getQinglongEnvList_success() throws IOException {
-        String base_url = "http://192.168.31.50:5700";
-        String token = "33b48d38-14b1-429f-bac0-a50cbb1f5a40";
+        String base_url = "http://<QL_HOST>:<QL_PORT>";
+        String token = "<QL_TOKEN>";
         String searchValue = "BJXD";
 
         QinglongEnv[] envList = ApiUtil.getQinglongEnvList(base_url, token, searchValue);
@@ -95,8 +99,8 @@ public class ApiUtilTest {
 
     @Test
     public void createQinglongEnv_success() throws IOException {
-        String base_url = "http://192.168.31.50:5700";
-        String token = "33b48d38-14b1-429f-bac0-a50cbb1f5a40";
+        String base_url = "http://<QL_HOST>:<QL_PORT>";
+        String token = "<QL_TOKEN>";
         String name = "TEST";
         String value = "Test Value";
         String remarks = "Test Remarks";
@@ -108,8 +112,8 @@ public class ApiUtilTest {
 
     @Test
     public void updateQinglongEnv_success() throws IOException {
-        String base_url = "http://192.168.31.50:5700";
-        String token = "33b48d38-14b1-429f-bac0-a50cbb1f5a40";
+        String base_url = "http://<QL_HOST>:<QL_PORT>";
+        String token = "<QL_TOKEN>";
         long id = 21; // 示例环境变量 ID，需要根据实际情况调整
         String name = "TEST3";
         String value = "TEST3 value";
@@ -123,8 +127,8 @@ public class ApiUtilTest {
 
     @Test
     public void deleteQinglongEnv_success() throws IOException {
-        String base_url = "http://192.168.31.50:5700";
-        String token = "33b48d38-14b1-429f-bac0-a50cbb1f5a40";
+        String base_url = "http://<QL_HOST>:<QL_PORT>";
+        String token = "<QL_TOKEN>";
         long id = 23; // 示例环境变量 ID，需要根据实际情况调整
 
         boolean result = ApiUtil.deleteQinglongEnv(base_url, token, id);

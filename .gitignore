@@ -7,5 +7,10 @@
 /captures
 .externalNativeBuild
 .cxx
-local.properties
-BJXD.jks
+.kotlin/
+/signing/
+
+# Android Studio Inspect Code 导出到项目根目录的报告（归档版放 audit/<日期>/inspection/）
+/index.html
+/script.js
+/styles.css

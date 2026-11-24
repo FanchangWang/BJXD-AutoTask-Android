@@ -1,0 +1,38 @@
+# 仓库内所有文本文件统一 LF（Windows 11 开发同样推荐 LF，不再使用 CRLF）
+* text eol=lf
+
+# 点文件没有扩展名，显式指定
+.gitattributes text eol=lf
+.gitignore text eol=lf
+
+# Windows 脚本必须保持 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Unix shell 脚本必须保持 LF，否则 Git Bash/WSL 报 bad interpreter
+gradlew text eol=lf
+*.sh text eol=lf
+
+# 常见源码/配置/文档统一 LF，消除 Windows 上 CRLF<->LF 的 git status 警告
+*.java text eol=lf
+*.kt text eol=lf
+*.kts text eol=lf
+*.xml text eol=lf
+*.gradle text eol=lf
+*.properties text eol=lf
+*.toml text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.pro text eol=lf
+
+# 二进制文件不做换行符转换
+*.jar binary
+*.jks binary
+*.webp binary
+*.png binary
+*.jpg binary
+*.apk binary
+*.aab binary

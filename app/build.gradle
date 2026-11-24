@@ -1,36 +1,62 @@
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.compose.compiler)
 }
+
+// 签名口令放在被 gitignore 的 local.properties，避免硬编码；本机用它签 signing/BJXD.jks，
+// 与已安装应用签名保持一致，可直接覆盖安装；新克隆无该文件时回退 AGP 默认 debug 签名。
+def localPropsFile = rootProject.file('local.properties')
+def localProps = new Properties()
+if (localPropsFile.exists()) {
+    localPropsFile.withInputStream { localProps.load(it) }
+}
+def keystoreFile = rootProject.file('signing/BJXD.jks')
+def keystorePassword = (project.findProperty('bjxd.keystore.password') ?: localProps.getProperty('bjxd.keystore.password'))?.toString()
+def keystoreAlias = (project.findProperty('bjxd.keystore.alias') ?: localProps.getProperty('bjxd.keystore.alias') ?: 'BJXD').toString()
 
 android {
     signingConfigs {
-        debug {
-            storeFile file('..\\BJXD.jks')
-            storePassword '123456'
-            keyAlias 'BJXD'
-            keyPassword '123456'
+        // 仅在存在 keystore 与口令时使用自定义签名；
+        // 新克隆没有时回退到 AGP 默认 debug 签名，保证可直接构建。
+        if (keystoreFile.exists() && keystorePassword != null) {
+            debug {
+                storeFile keystoreFile
+                storePassword keystorePassword
+                keyAlias keystoreAlias
+                keyPassword keystorePassword
+            }
+            release {
+                storeFile keystoreFile
+                storePassword keystorePassword
+                keyAlias keystoreAlias
+                keyPassword keystorePassword
+            }
         }
     }
     namespace = 'com.guyuexuan.bjxd'
-    compileSdkVersion = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId "com.guyuexuan.bjxd"
-        minSdkVersion 25
-        targetSdkVersion 36
-        versionCode 2
-        versionName "1.8"
+        minSdk = 25
+        targetSdk = 37
+        versionCode 3
+        versionName "2.0"
     }
 
     buildFeatures {
         buildConfig = true
         resValues = true
+        compose = true
     }
 
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (keystoreFile.exists() && keystorePassword != null) {
+                signingConfig signingConfigs.release
+            }
         }
     }
     compileOptions {
@@ -47,24 +73,80 @@ android {
     testOptions {
         unitTests {
             includeAndroidResources = true
-            returnDefaultValues = true
+            returnDefaultValues = false
         }
     }
 }
 
 dependencies {
-    // AndroidX 核心库
-    implementation libs.appcompat
+    // Material3 XML 主题 + Activity/Compose
     implementation libs.material
     implementation libs.activity
-    implementation libs.constraintlayout
-    implementation libs.recyclerview
-    implementation libs.webkit
 
-    // 使用 Bundle 引入
+    // Compose（BOM 统一版本）
+    implementation platform(libs.compose.bom)
+    implementation libs.compose.ui
+    implementation libs.compose.foundation
+    implementation libs.compose.material3
+    implementation libs.compose.icons.core
+    implementation libs.compose.icons.extended
+    implementation libs.coroutines.android
+    implementation libs.compose.ui.tooling.preview
+    implementation libs.activity.compose
+    debugImplementation libs.compose.ui.tooling
+
     implementation libs.bundles.network
-    implementation libs.bundles.lifecycle
 
     // 测试依赖
     testImplementation libs.junit
 }
+
+// ui-android skill: 设计规则静态检查（不依赖 detekt 插件版本，避免 Kotlin 2.x 兼容问题）
+// 检测任意 dp/sp、Color 字面量、渐变/占位文案/无限装饰动画、buzzword。
+// 规则清单见 config/detekt/detekt.yml。
+def designPatternChecks = [
+        'Hardcoded dp literal outside theme'  : ~/\b\d+\.dp\b/,
+        'Hardcoded sp literal outside Type.kt': ~/\b\d+\.sp\b/,
+        'Color literal outside Color.kt'      : ~/Color\(0x[0-9A-Fa-f]+\)/,
+        'Generic gradient'                    : ~/(?i)Brush\.\w*Gradient\s*\(/,
+        'Filler copy'                         : ~/(?i)(Lorem ipsum|Lightning fast|Blazing fast|Powered by AI|Built for the modern|Get started in seconds|Beautiful and intuitive|Seamlessly integrate|Effortlessly|The future of|Reimagined|Unleash the power of)/,
+        'Generic CTA'                         : ~/"(Get Started|Learn More|Click Here|Submit)"/,
+        'Buzzword'                            : ~/(?i)\b(clean|modern|professional|sleek|premium|beautiful|elegant)\b/,
+        'Inline Inter font'                   : ~/FontFamily\("Inter"\)/,
+        'Infinite transition decoration'      : ~/rememberInfiniteTransition/,
+]
+
+def designSources = fileTree('src/main').matching { include '**/*.kt' }
+def designRootDir = rootDir
+
+tasks.register('detektDesign') {
+    group = 'verification'
+    description = 'Checks Compose sources against ui-android design rules.'
+    doLast {
+        def violations = []
+        designSources.each { f ->
+            if (f.path.replace('\\', '/').contains('/ui/theme/')) return
+            def text = f.text
+            designPatternChecks.each { label, regex ->
+                def m = regex.matcher(text)
+                while (m.find()) {
+                    def line = text.substring(0, m.start()).count('\n') + 1
+                    def rel = designRootDir.toPath().relativize(f.toPath()).toString()
+                    violations += "${rel}:${line} [${label}] ${m.group()}"
+                }
+            }
+        }
+        if (!violations.isEmpty()) {
+            throw new GradleException("ui-android design violations:\n" + violations.join('\n'))
+        }
+    }
+}
+
+// 让 ./gradlew detekt 在没装 detekt 插件的项目里也能做设计校验
+tasks.register('checkDesignRules') {
+    group = 'verification'
+    description = 'Design-rule check (alias of detektDesign); detekt plugin is not applied.'
+    dependsOn 'detektDesign'
+}
+
+tasks.named('check') { dependsOn 'detektDesign' }

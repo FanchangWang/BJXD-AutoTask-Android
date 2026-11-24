@@ -1,0 +1,41 @@
+# ui-android slop-blocking design rules.
+# Active bans: 1 Generic gradient slop, 2 Lorem ipsum & filler copy,
+# 3 Arbitrary values, 4 Default font tells, 6 Card-in-card nesting,
+# 7 Generic layout patterns, 8 Decorative motion.
+#
+# Enforced by app/build.gradle task `detektDesign` (regex scan of all
+# src/main/**/*.kt outside ui/theme/) and wired into `check`.
+# detekt plugin is intentionally not applied: detekt 1.x uses an older Kotlin
+# compiler than this project (Kotlin 2.2.10 via AGP 9 built-in Kotlin).
+
+style:
+  ForbiddenComment:
+    active: true
+    comments:
+      - reason: "Banned buzzword. Replace with a concrete property from your anchor recipe."
+        value: "(?i)\\b(clean|modern|professional|sleek|premium|beautiful|elegant)\\b"
+
+  MagicNumber:
+    active: true
+    excludes:
+      - '**/ui/theme/**'
+      - '**/test/**'
+      - '**/androidTest/**'
+    ignoreNumbers: [ '-1', '0', '1', '2' ]
+
+  ForbiddenMethodCall:
+    active: true
+    methods:
+      - reason: "Banned: Modifier.blur() on regular surfaces."
+        value: "androidx.compose.ui.draw.blur"
+
+pattern_checks:
+  hardcoded_dp_outside_theme: '\b\d+\.dp\b'
+  hardcoded_sp_outside_type: '\b\d+\.sp\b'
+  color_literal_outside_color: 'Color\(0x[0-9A-Fa-f]+\)'
+  generic_gradient: '(?i)Brush\.\w*Gradient\s*\('
+  filler_copy: '(?i)(Lorem ipsum|Lightning fast|Blazing fast|Powered by AI|Built for the modern|Get started in seconds|Beautiful and intuitive|Seamlessly integrate|Effortlessly|The future of|Reimagined|Unleash the power of)'
+  generic_cta: '"(Get Started|Learn More|Click Here|Submit)"'
+  buzzword: '(?i)\b(clean|modern|professional|sleek|premium|beautiful|elegant)\b'
+  inline_inter_font: 'FontFamily\("Inter"\)'
+  infinite_transition_decoration: 'rememberInfiniteTransition'

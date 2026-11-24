@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
+    <!-- 只信任系统 CA，避免用户安装的证书造成中间人攻击；
+         明文仅用于内网青龙面板等场景，业务 API 本身为 HTTPS -->
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
-            <certificates src="user" />
         </trust-anchors>
     </base-config>
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">bluemembers.com.cn</domain>
         <trust-anchors>
             <certificates src="system" />
-            <certificates src="user" />
         </trust-anchors>
     </domain-config>
-</network-security-config> 
+</network-security-config>

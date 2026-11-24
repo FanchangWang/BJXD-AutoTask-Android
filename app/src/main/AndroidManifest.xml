@@ -3,6 +3,11 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 后台运行所需的权限 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
         android:allowBackup="true"
@@ -37,5 +42,26 @@
         <activity
             android:name=".TaskActivity"
             android:exported="false" />
+        <activity
+            android:name=".TaskLogActivity"
+            android:exported="false" />
+        <activity
+            android:name=".AnswerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.BJXD.AnswerDialog" />
+
+        <service
+            android:name=".service.TaskService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <receiver
+            android:name=".service.TaskActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.guyuexuan.bjxd.action.TASK_ANSWER" />
+                <action android:name="com.guyuexuan.bjxd.action.TASK_STOP" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

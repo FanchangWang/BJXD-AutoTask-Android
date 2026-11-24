@@ -6,6 +6,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonSyntaxException;
 import com.guyuexuan.bjxd.model.QinglongEnv;
 import com.guyuexuan.bjxd.model.TaskStatus;
 import com.guyuexuan.bjxd.model.User;
@@ -15,13 +16,16 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import okhttp3.ConnectionPool;
+import okhttp3.HttpUrl;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 /**
  * API工具类，封装了与服务器交互的所有HTTP请求方法
@@ -52,8 +56,18 @@ public class ApiUtil {
             .writeTimeout(5, TimeUnit.MINUTES) // 写入超时也设置为3分钟
             .retryOnConnectionFailure(true).build();
 
-    private static final Gson gson = new Gson();
+    // 百度 AI 搜索（千帆）专用客户端：给出比业务接口更宽松的超时
+    private static final OkHttpClient searchClient = new OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build();
 
+    private static final Gson gson = new Gson();
+    /**
+     * 百度千帆 AI 搜索接口，与 Python 版 WebSearcher 保持一致
+     */
+    private static final String BAIDU_SEARCH_URL = "https://qianfan.baidubce.com/v2/ai_search/web_search";
     /**
      * API 端点
      * <p>
@@ -70,9 +84,17 @@ public class ApiUtil {
     private static final String API_TASK_SCORE = "/v1/app/score";
     private static final String API_QUESTION_INFO = "/v1/app/special/daily/ask_info";
     private static final String API_QUESTION_SUBMIT = "/v1/app/special/daily/ask_answer";
-
     private static final String API_QINGLONG_AUTH = "/open/auth/token";
     private static final String API_QINGLONG_ENVS = "/open/envs";
+
+    /**
+     * 停止任务时中断所有在途请求（AI 读超时可达 5 分钟），兜底取消
+     */
+    public static void cancelAllCalls() {
+        client.dispatcher().cancelAll();
+        aiClient.dispatcher().cancelAll();
+        searchClient.dispatcher().cancelAll();
+    }
 
     /**
      * 获取带有默认请求头的Request.Builder
@@ -89,6 +111,47 @@ public class ApiUtil {
     }
 
     /**
+     * 把响应体解析为 JsonObject；空体/非对象/畸形 JSON 一律抛带端点名的 IOException
+     */
+    private static JsonObject parseObject(Response response, String endpoint) throws IOException {
+        ResponseBody body = response.body();
+        if (body == null) throw new IOException(endpoint + ": empty response body");
+        String json = body.string();
+        if (json == null || json.trim().isEmpty() || "null".equals(json.trim())) {
+            throw new IOException(endpoint + ": empty response");
+        }
+        try {
+            JsonObject object = gson.fromJson(json, JsonObject.class);
+            if (object == null || object.isJsonNull()) {
+                throw new IOException(endpoint + ": response is not a JSON object");
+            }
+            return object;
+        } catch (JsonSyntaxException e) {
+            throw new IOException(endpoint + ": malformed JSON response", e);
+        }
+    }
+
+    /**
+     * 必需字段：缺失或 JSON null 时抛明确异常，避免平台类型 NPE
+     */
+    private static JsonElement required(JsonObject object, String key, String endpoint) throws IOException {
+        JsonElement element = object.get(key);
+        if (element == null || element.isJsonNull()) {
+            throw new IOException(endpoint + ": missing field " + key);
+        }
+        return element;
+    }
+
+    private static String readMsg(JsonObject object, String endpoint) {
+        JsonElement msg = object.get("msg");
+        if (msg == null || msg.isJsonNull()) {
+            JsonElement message = object.get("message");
+            msg = message == null || message.isJsonNull() ? null : message;
+        }
+        return msg == null ? endpoint + ": server returned an error" : msg.getAsString();
+    }
+
+    /**
      * 获取用户信息
      *
      * @param token 用户认证token
@@ -101,17 +164,14 @@ public class ApiUtil {
 
         try (Response response = client.newCall(request).execute()) {
             if (response.isSuccessful()) {
-                String json = response.body().string();
-                System.out.println("getUserInfo API Response: " + json);
-
-                JsonObject jsonObject = gson.fromJson(json, JsonObject.class);
-                if (jsonObject.get("code").getAsInt() == 0) {
-                    JsonObject data = jsonObject.getAsJsonObject("data");
+                JsonObject jsonObject = parseObject(response, "getUserInfo");
+                if (required(jsonObject, "code", "getUserInfo").getAsInt() == 0) {
+                    JsonObject data = required(jsonObject, "data", "getUserInfo").getAsJsonObject();
                     // 手动添加 token，因为 data 中没有这个字段，而 User 类需要它
                     data.addProperty("token", token);
                     return User.fromJson(data);
                 } else {
-                    throw new IOException(jsonObject.get("msg").getAsString());
+                    throw new IOException(readMsg(jsonObject, "getUserInfo"));
                 }
             } else {
                 if (response.code() == 403) {
@@ -136,7 +196,6 @@ public class ApiUtil {
         try (Response response = client.newCall(request).execute()) {
             if (response.isSuccessful()) {
                 String json = response.body().string();
-                System.out.println("getScore API Response: " + json);
 
                 JsonObject jsonObject = gson.fromJson(json, JsonObject.class);
                 if (jsonObject.get("code").getAsInt() == 0) {
@@ -171,7 +230,6 @@ public class ApiUtil {
         try (Response response = client.newCall(request).execute()) {
             if (response.isSuccessful()) {
                 String json = response.body().string();
-                System.out.println("getTaskStatus API Response: " + json);
 
                 JsonObject jsonObject = gson.fromJson(json, JsonObject.class);
                 if (jsonObject.get("code").getAsInt() == 0) {
@@ -219,7 +277,6 @@ public class ApiUtil {
         try (Response response = client.newCall(request).execute()) {
             if (response.isSuccessful()) {
                 String json = response.body().string();
-                System.out.println("getSignInfo API Response: " + json);
 
                 JsonObject jsonObject = gson.fromJson(json, JsonObject.class);
                 if (jsonObject.get("code").getAsInt() == 0) {
@@ -255,7 +312,6 @@ public class ApiUtil {
         try (Response response = client.newCall(request).execute()) {
             if (response.isSuccessful()) {
                 String json = response.body().string();
-                System.out.println("submitSign API Response: " + json);
 
                 JsonObject jsonObject = gson.fromJson(json, JsonObject.class);
                 if (jsonObject.get("code").getAsInt() != 0) {
@@ -283,7 +339,6 @@ public class ApiUtil {
         try (Response response = client.newCall(request).execute()) {
             if (response.isSuccessful()) {
                 String json = response.body().string();
-                System.out.println("getArticleList API Response: " + json);
 
                 JsonObject jsonObject = gson.fromJson(json, JsonObject.class);
                 if (jsonObject.get("code").getAsInt() == 0) {
@@ -313,7 +368,6 @@ public class ApiUtil {
         try (Response response = client.newCall(request).execute()) {
             if (response.isSuccessful()) {
                 String json = response.body().string();
-                System.out.println("viewArticle API Response: " + json);
 
                 JsonObject jsonObject = gson.fromJson(json, JsonObject.class);
                 if (jsonObject.get("code").getAsInt() != 0) {
@@ -347,7 +401,6 @@ public class ApiUtil {
         try (Response response = client.newCall(request).execute()) {
             if (response.isSuccessful()) {
                 String json = response.body().string();
-                System.out.println("submitArticleScore API Response: " + json);
 
                 JsonObject jsonObject = gson.fromJson(json, JsonObject.class);
                 if (jsonObject.get("code").getAsInt() == 0) {
@@ -378,7 +431,6 @@ public class ApiUtil {
         try (Response response = client.newCall(request).execute()) {
             if (response.isSuccessful()) {
                 String json = response.body().string();
-                System.out.println("getQuestionInfo API Response: " + json);
 
                 JsonObject jsonObject = gson.fromJson(json, JsonObject.class);
                 if (jsonObject.get("code").getAsInt() == 0) {
@@ -425,7 +477,6 @@ public class ApiUtil {
         try (Response response = client.newCall(request).execute()) {
             if (response.isSuccessful()) {
                 String json = response.body().string();
-                System.out.println("submitQuestionAnswer API Response: " + json);
 
                 JsonObject jsonObject = gson.fromJson(json, JsonObject.class);
                 if (jsonObject.get("code").getAsInt() == 0) {
@@ -437,6 +488,137 @@ public class ApiUtil {
                 throw new IOException("请求失败: " + response.code());
             }
         }
+    }
+
+    /**
+     * 百度 AI 搜索（千帆）：按题干检索资料，返回可直接拼进 prompt 的文本。
+     * <p>
+     * 与 Python 版 WebSearcher 行为一致：任何异常都只记日志并返回空串，
+     * 绝不影响签到等主任务。免费额度每月 1500 次。
+     * </p>
+     *
+     * @param apiKey         百度 bce-v3 API Key
+     * @param resultCount    搜索结果条数（1-10）
+     * @param timeoutSeconds 读取超时秒数
+     * @param query          搜索关键词（题干）
+     * @param logger         日志回调，可为 null
+     * @return 资料文本；失败或无结果返回空串
+     */
+    public static String searchBaidu(String apiKey, int resultCount, int timeoutSeconds,
+                                     String query, Consumer<String> logger) {
+        if (apiKey == null || apiKey.trim().isEmpty() || query == null || query.trim().isEmpty()) {
+            return "";
+        }
+
+        int topK = Math.max(1, Math.min(resultCount, 10));
+        String keyword = query.length() > 70 ? query.substring(0, 70) : query;
+
+        JsonObject payload = new JsonObject();
+        JsonArray messages = new JsonArray();
+        JsonObject message = new JsonObject();
+        message.addProperty("role", "user");
+        message.addProperty("content", keyword);
+        messages.add(message);
+        payload.add("messages", messages);
+        payload.addProperty("search_source", "baidu_search_v2");
+
+        JsonArray resourceFilter = new JsonArray();
+        JsonObject webFilter = new JsonObject();
+        webFilter.addProperty("type", "web");
+        webFilter.addProperty("top_k", topK);
+        resourceFilter.add(webFilter);
+        payload.add("resource_type_filter", resourceFilter);
+
+        Request request = new Request.Builder()
+                .url(BAIDU_SEARCH_URL)
+                .addHeader("Authorization", "Bearer " + apiKey.trim())
+                .addHeader("Content-Type", "application/json")
+                .post(RequestBody.create(payload.toString(), MediaType.parse("application/json; charset=utf-8")))
+                .build();
+
+        OkHttpClient clientWithTimeout = searchClient.newBuilder()
+                .readTimeout(Math.max(1, timeoutSeconds), TimeUnit.SECONDS)
+                .build();
+        try (Response response = clientWithTimeout.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                logSearch(logger, "⚠️ 百度搜索 HTTP " + response.code() + "，仅用题目询问 AI");
+                return "";
+            }
+
+            JsonObject result = gson.fromJson(response.body().string(), JsonObject.class);
+            int code = 0;
+            if (result.has("code") && !result.get("code").isJsonNull()) {
+                try {
+                    code = result.get("code").getAsInt();
+                } catch (Exception ignored) {
+                    code = -1;
+                }
+            }
+            if (code != 0) {
+                String msg = result.has("message") ? result.get("message").getAsString() : "";
+                logSearch(logger, "⚠️ 百度搜索返回错误码 " + code + ": " + msg);
+                return "";
+            }
+
+            JsonArray references = result.getAsJsonArray("references");
+            if (references == null || references.isEmpty()) {
+                logSearch(logger, "⚠️ 联网搜索未取得有效资料，仅用题目询问 AI");
+                return "";
+            }
+
+            StringBuilder material = new StringBuilder();
+            int count = Math.min(topK, references.size());
+            for (int i = 0; i < count; i++) {
+                JsonObject item = references.get(i).getAsJsonObject();
+                String content = firstNonBlank(item, "content", "description");
+                if (content.isEmpty()) {
+                    continue;
+                }
+                String title = firstNonBlank(item, "title");
+                String site = firstNonBlank(item, "website", "site_name");
+                String header = site.isEmpty() ? title : (title.isEmpty() ? site : title + "（" + site + "）");
+                if (!header.isEmpty()) {
+                    material.append(header).append('\n');
+                }
+                material.append(content).append("\n\n");
+                if (material.length() > 8000) {
+                    break;
+                }
+            }
+
+            String text = material.toString().trim();
+            if (text.isEmpty()) {
+                logSearch(logger, "⚠️ 联网搜索未取得有效资料，仅用题目询问 AI");
+                return "";
+            }
+            if (text.length() > 8000) {
+                text = text.substring(0, 8000);
+            }
+            logSearch(logger, String.format(Locale.getDefault(),
+                    "📚 联网搜索取得 %d 字资料（%d 条结果）", text.length(), count));
+            return text;
+        } catch (Exception e) {
+            logSearch(logger, "⚠️ 联网搜索失败（" + e.getMessage() + "），仅用题目询问 AI");
+            return "";
+        }
+    }
+
+    private static void logSearch(Consumer<String> logger, String message) {
+        if (logger != null) {
+            logger.accept(message);
+        }
+    }
+
+    private static String firstNonBlank(JsonObject obj, String... keys) {
+        for (String key : keys) {
+            if (obj.has(key) && !obj.get(key).isJsonNull()) {
+                String value = obj.get(key).getAsString().trim();
+                if (!value.isEmpty()) {
+                    return value;
+                }
+            }
+        }
+        return "";
     }
 
     /**
@@ -484,10 +666,21 @@ public class ApiUtil {
         try (Response response = aiClient.newCall(request).execute()) {
             if (response.isSuccessful()) {
                 String json = response.body().string();
-                System.out.println("askAI API Response: " + json);
 
                 JsonObject jsonObject = gson.fromJson(json, JsonObject.class);
-                return jsonObject.getAsJsonArray("choices").get(0).getAsJsonObject().getAsJsonObject("message").get("content").getAsString();
+                JsonElement choices = required(jsonObject, "choices", "askAI");
+                if (!choices.isJsonArray() || choices.getAsJsonArray().isEmpty()) {
+                    throw new IOException("askAI: empty choices");
+                }
+                JsonObject message = choices.getAsJsonArray().get(0).getAsJsonObject().getAsJsonObject("message");
+                if (message == null || message.isJsonNull()) {
+                    throw new IOException("askAI: missing message");
+                }
+                JsonElement content = message.get("content");
+                if (content == null || content.isJsonNull() || content.getAsString().isEmpty()) {
+                    content = message.get("reasoning_content");
+                }
+                return content == null || content.isJsonNull() ? "" : content.getAsString();
             } else {
                 throw new IOException("请求失败: " + response.code());
             }
@@ -507,8 +700,15 @@ public class ApiUtil {
      * @throws IOException 如果网络请求失败或服务器返回错误
      */
     public static String getQinglongToken(String base_url, String client_id, String client_secret) throws IOException {
-        // 构建完整 URL，包含 client_id 和 client_secret 参数
-        String url = base_url + API_QINGLONG_AUTH + "?client_id=" + client_id + "&client_secret=" + client_secret;
+        // 用 HttpUrl 编码参数，避免 secret 中的 & + # 等字符截断或注入
+        HttpUrl parsed = HttpUrl.parse(base_url + API_QINGLONG_AUTH);
+        if (parsed == null) {
+            throw new IOException("Invalid Qinglong base URL: " + base_url);
+        }
+        HttpUrl url = parsed.newBuilder()
+                .addQueryParameter("client_id", client_id)
+                .addQueryParameter("client_secret", client_secret)
+                .build();
 
         // 创建请求，添加 Accept 头
         Request request = new Request.Builder().url(url).get().addHeader("Accept", "application/json").build();
@@ -517,7 +717,6 @@ public class ApiUtil {
         try (Response response = client.newCall(request).execute()) {
             if (response.isSuccessful()) {
                 String json = response.body().string();
-                System.out.println("getQinglongToken API Response: " + json);
 
                 // 解析 JSON 响应
                 JsonObject jsonObject = gson.fromJson(json, JsonObject.class);
@@ -550,7 +749,13 @@ public class ApiUtil {
      */
     public static QinglongEnv[] getQinglongEnvList(String base_url, String token, String searchValue) throws IOException {
         // 构建完整 URL，包含 searchValue 参数
-        String url = base_url + API_QINGLONG_ENVS + "?searchValue=" + searchValue;
+        HttpUrl parsed = HttpUrl.parse(base_url + API_QINGLONG_ENVS);
+        if (parsed == null) {
+            throw new IOException("Invalid Qinglong base URL: " + base_url);
+        }
+        HttpUrl url = parsed.newBuilder()
+                .addQueryParameter("searchValue", searchValue)
+                .build();
 
         // 创建请求，添加 Accept 头和 Authorization 头
         Request request = new Request.Builder().url(url).get().addHeader("Accept", "application/json").addHeader("Authorization", "Bearer " + token).build();
@@ -559,7 +764,6 @@ public class ApiUtil {
         try (Response response = client.newCall(request).execute()) {
             if (response.isSuccessful()) {
                 String json = response.body().string();
-                System.out.println("getQinglongEnvs API Response: " + json);
 
                 // 解析 JSON 响应
                 JsonObject jsonObject = gson.fromJson(json, JsonObject.class);
@@ -568,7 +772,11 @@ public class ApiUtil {
                     JsonElement dataElement = jsonObject.get("data");
 
                     // 关键：直接将 dataElement 转换为 QinglongEnv 数组
-                    return gson.fromJson(dataElement, QinglongEnv[].class);
+                    QinglongEnv[] envs = gson.fromJson(dataElement, QinglongEnv[].class);
+                    if (envs == null) {
+                        throw new IOException("getQinglongEnvList: empty data");
+                    }
+                    return envs;
                 } else {
                     // 处理业务错误
                     throw new IOException("API Error: " + jsonObject.get("code").getAsString() + " - " + (jsonObject.has("msg") ? jsonObject.get("msg").getAsString() : "Unknown error"));
@@ -616,7 +824,6 @@ public class ApiUtil {
         try (Response response = client.newCall(request).execute()) {
             if (response.isSuccessful()) {
                 String json = response.body().string();
-                System.out.println("createQinglongEnv API Response: " + json);
 
                 // 解析 JSON 响应
                 JsonObject jsonObject = gson.fromJson(json, JsonObject.class);
@@ -675,7 +882,6 @@ public class ApiUtil {
         try (Response response = client.newCall(request).execute()) {
             if (response.isSuccessful()) {
                 String json = response.body().string();
-                System.out.println("updateQinglongEnv API Response: " + json);
 
                 // 解析 JSON 响应
                 JsonObject jsonObject = gson.fromJson(json, JsonObject.class);
@@ -724,7 +930,6 @@ public class ApiUtil {
         try (Response response = client.newCall(request).execute()) {
             if (response.isSuccessful()) {
                 String json = response.body().string();
-                System.out.println("deleteQinglongEnv API Response: " + json);
 
                 // 解析 JSON 响应
                 JsonObject jsonObject = gson.fromJson(json, JsonObject.class);

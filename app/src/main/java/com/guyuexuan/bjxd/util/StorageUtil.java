@@ -11,6 +11,13 @@ import java.lang.reflect.Type;
 import java.util.List;
 
 public class StorageUtil {
+    /**
+     * 推荐的免费 AI：智谱 GLM，只让用户填 API Key，其余参数内置
+     */
+    public static final String DEFAULT_AI_REQUEST_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
+    public static final String DEFAULT_AI_MODEL = "glm-4.5-flash";
+    public static final String DEFAULT_AI_REQUEST_PARAMS = "{\"do_sample\": false}";
+
     private static final String PREF_NAME = "app_config";
     private static final String KEY_USERS = "users";
     private static final String KEY_API_KEY = "api_key";
@@ -19,6 +26,10 @@ public class StorageUtil {
     private static final String KEY_AI_MODEL = "ai_model";
     private static final String KEY_AI_REQUEST_PARAMS = "ai_request_params";
     private static final String KEY_MANUAL_ANSWER = "manual_answer";
+    private static final String KEY_SEARCH_ENABLED = "search_enabled";
+    private static final String KEY_SEARCH_API_KEY = "search_api_key";
+    private static final String KEY_SEARCH_RESULT_COUNT = "search_result_count";
+    private static final String KEY_SEARCH_TIMEOUT = "search_timeout";
     private static final String KEY_QINGLONG_REQUEST_URL = "qinglong_request_url";
     private static final String KEY_QINGLONG_CLIENT_ID = "qinglong_client_id";
     private static final String KEY_QINGLONG_CLIENT_SECRET = "qinglong_client_secret";
@@ -59,9 +70,9 @@ public class StorageUtil {
      *
      * @param users 用户列表
      */
-    public void saveUserList(List<User> users) {
+    public synchronized void saveUserList(List<User> users) {
         String json = gson.toJson(users);
-        prefs.edit().putString(KEY_USERS, json).apply();
+        prefs.edit().putString(KEY_USERS, json).commit();
     }
 
     /**
@@ -119,7 +130,8 @@ public class StorageUtil {
      * @return AI 请求 URL
      */
     public String getAiRequestUrl() {
-        return prefs.getString(KEY_AI_REQUEST_URL, "");
+        String value = prefs.getString(KEY_AI_REQUEST_URL, "");
+        return value.isEmpty() ? DEFAULT_AI_REQUEST_URL : value;
     }
 
     /**
@@ -137,7 +149,8 @@ public class StorageUtil {
      * @return AI 模型名称
      */
     public String getAiModel() {
-        return prefs.getString(KEY_AI_MODEL, "");
+        String value = prefs.getString(KEY_AI_MODEL, "");
+        return value.isEmpty() ? DEFAULT_AI_MODEL : value;
     }
 
     /**
@@ -155,7 +168,8 @@ public class StorageUtil {
      * @return AI 请求参数 JSON 字符串
      */
     public String getAiRequestParams() {
-        return prefs.getString(KEY_AI_REQUEST_PARAMS, "");
+        String value = prefs.getString(KEY_AI_REQUEST_PARAMS, "");
+        return value.isEmpty() ? DEFAULT_AI_REQUEST_PARAMS : value;
     }
 
     /**
@@ -189,10 +203,53 @@ public class StorageUtil {
      * @return 如果 AI API 密钥、请求 URL 和模型名称都已设置（非空），则返回 true；否则返回 false。
      */
     public boolean checkAiSettings() {
-        String aiApiKey = getAiApiKey();
-        String aiRequestUrl = getAiRequestUrl();
-        String aiModel = getAiModel();
-        return !aiApiKey.isEmpty() && !aiRequestUrl.isEmpty() && !aiModel.isEmpty();
+        // URL / 模型 / 参数都有内置默认值（智谱 GLM），用户只需填 API Key
+        return !getAiApiKey().isEmpty();
+    }
+
+    /**
+     * 恢复 AI 参数为推荐值（智谱 GLM，免费），保留用户已填的 API Key
+     */
+    public void restoreAiDefaults() {
+        saveAiRequestUrl(DEFAULT_AI_REQUEST_URL);
+        saveAiModel(DEFAULT_AI_MODEL);
+        saveAiRequestParams(DEFAULT_AI_REQUEST_PARAMS);
+    }
+
+    // ------------------------------------------------------------------
+    // 百度 AI 搜索配置
+    // ------------------------------------------------------------------
+
+    public boolean isSearchEnabled() {
+        return prefs.getBoolean(KEY_SEARCH_ENABLED, true);
+    }
+
+    public void setSearchEnabled(boolean enabled) {
+        prefs.edit().putBoolean(KEY_SEARCH_ENABLED, enabled).apply();
+    }
+
+    public String getSearchApiKey() {
+        return prefs.getString(KEY_SEARCH_API_KEY, "");
+    }
+
+    public void saveSearchApiKey(String key) {
+        prefs.edit().putString(KEY_SEARCH_API_KEY, key).apply();
+    }
+
+    public int getSearchResultCount() {
+        return prefs.getInt(KEY_SEARCH_RESULT_COUNT, 5);
+    }
+
+    public void saveSearchResultCount(int count) {
+        prefs.edit().putInt(KEY_SEARCH_RESULT_COUNT, Math.max(1, Math.min(count, 10))).apply();
+    }
+
+    public int getSearchTimeout() {
+        return prefs.getInt(KEY_SEARCH_TIMEOUT, 30);
+    }
+
+    public void saveSearchTimeout(int timeout) {
+        prefs.edit().putInt(KEY_SEARCH_TIMEOUT, Math.max(1, timeout)).apply();
     }
 
     /**
@@ -213,7 +270,8 @@ public class StorageUtil {
      * @return true 表示启用手动回答，false 表示禁用
      */
     public boolean isManualAnswer() {
-        return prefs.getBoolean(KEY_MANUAL_ANSWER, true);
+        // 默认全自动：配合 AI + 百度搜索答题；需要弹窗/通知手选时再到设置里打开
+        return prefs.getBoolean(KEY_MANUAL_ANSWER, false);
     }
 
     /**
@@ -285,7 +343,7 @@ public class StorageUtil {
      * @param user 用户对象
      * @return 新用户返回 -1，老用户返回其在列表中的位置
      */
-    public int saveUser(User user) {
+    public synchronized int saveUser(User user) {
         List<User> userList = getUserList();
 
         // 检查是否已存在
